@@ -1,3 +1,3 @@
-export function tsFunc(): string {
+export function ts_func(): string {
     return "ts";
 }
