@@ -1,4 +1,6 @@
+import fnmatch
 import logging
+import os
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -6,8 +8,6 @@ from enum import StrEnum
 from typing import Any, Self
 
 from joblib import Parallel, delayed
-from pathspec import PathSpec
-from pathspec.patterns.gitwildmatch import GitWildMatchPattern
 
 log = logging.getLogger(__name__)
 
@@ -112,8 +112,29 @@ class MatchedConsecutiveLines:
         return cls(lines=text_lines, source_file_path=source_file_path)
 
 
+def glob_to_regex(glob_pat: str) -> str:
+    regex_parts: list[str] = []
+    i = 0
+    while i < len(glob_pat):
+        ch = glob_pat[i]
+        if ch == "*":
+            regex_parts.append(".*")
+        elif ch == "?":
+            regex_parts.append(".")
+        elif ch == "\\":
+            i += 1
+            if i < len(glob_pat):
+                regex_parts.append(re.escape(glob_pat[i]))
+            else:
+                regex_parts.append("\\")
+        else:
+            regex_parts.append(re.escape(ch))
+        i += 1
+    return "".join(regex_parts)
+
+
 def search_text(
-    pattern: str | re.Pattern[str],
+    pattern: str,
     content: str | None = None,
     source_file_path: str | None = None,
     allow_multiline_match: bool = False,
@@ -124,20 +145,18 @@ def search_text(
     """
     Search for a pattern in text content. Supports both regex and glob-like patterns.
 
-    Args:
-        pattern: Pattern to search for (regex or glob-like pattern)
-        content: The text content to search. May be None if source_file_path is provided.
-        source_file_path: Optional path to the source file. If content is None,
-            this has to be passed and the file will be read.
-        allow_multiline_match: Whether to search across multiple lines. Currently, the default
-            option (False) is very inefficient, so it is recommended to set this to True.
-        context_lines_before: Number of context lines to include before matches
-        context_lines_after: Number of context lines to include after matches
-        is_glob: If True, pattern is treated as a glob-like pattern (e.g., "*.py", "test_??.py")
-                 and will be converted to regex internally
+    :param pattern: Pattern to search for (regex or glob-like pattern)
+    :param content: The text content to search. May be None if source_file_path is provided.
+    :param source_file_path: Optional path to the source file. If content is None,
+        this has to be passed and the file will be read.
+    :param allow_multiline_match: Whether to search across multiple lines. Currently, the default
+        option (False) is very inefficient, so it is recommended to set this to True.
+    :param context_lines_before: Number of context lines to include before matches
+    :param context_lines_after: Number of context lines to include after matches
+    :param is_glob: If True, pattern is treated as a glob-like pattern (e.g., "*.py", "test_??.py")
+             and will be converted to regex internally
 
-    Returns:
-        List of TextSearchMatch objects
+    :return: List of `TextSearchMatch` objects
 
     :raises: ValueError if the pattern is not valid
 
@@ -150,43 +169,15 @@ def search_text(
         raise ValueError("Pass either content or source_file_path")
 
     matches = []
-
-    # Convert pattern to a compiled regex if it's a string
-    if is_glob and isinstance(pattern, str):
-        # Convert glob pattern to regex
-        # Escape all regex special characters except * and ?
-        regex_special_chars = r"\^$.|+()[{"
-        escaped_pattern = ""
-        for char in pattern:
-            if char in regex_special_chars:
-                escaped_pattern += "\\" + char
-            elif char == "*":
-                escaped_pattern += ".*"
-            elif char == "?":
-                escaped_pattern += "."
-            else:
-                escaped_pattern += char
-        # For glob patterns, don't anchor with ^ and $ to allow partial line matches
-        compiled_pattern = re.compile(escaped_pattern)
-    elif isinstance(pattern, str):
-        try:
-            compiled_pattern = re.compile(pattern)
-        except re.error as e:
-            raise ValueError(f"Invalid regex pattern: {e}") from e
-    else:
-        # Pattern is already a compiled regex
-        compiled_pattern = pattern
-
-    # Split the content into lines for processing
     lines = content.splitlines()
     total_lines = len(lines)
 
+    # Convert pattern to a compiled regex if it's a string
+    if is_glob:
+        pattern = glob_to_regex(pattern)
     if allow_multiline_match:
         # For multiline matches, we need to use the DOTALL flag to make '.' match newlines
-        if isinstance(pattern, str):
-            # If we've compiled the pattern ourselves, we need to recompile with DOTALL
-            pattern_str = compiled_pattern.pattern
-            compiled_pattern = re.compile(pattern_str, re.DOTALL)
+        compiled_pattern = re.compile(pattern, re.DOTALL)
         # Search across the entire content as a single string
         for match in compiled_pattern.finditer(content):
             start_pos = match.start()
@@ -217,7 +208,8 @@ def search_text(
     else:
         # TODO: extremely inefficient! Since we currently don't use this option in SerenaAgent or LanguageServer,
         #   it is not urgent to fix, but should be either improved or the option should be removed.
-        # Search line by line
+        # Search line by line, normal compile without DOTALL
+        compiled_pattern = re.compile(pattern)
         for i, line in enumerate(lines):
             line_num = i + 1
             if compiled_pattern.search(line):
@@ -249,9 +241,56 @@ def default_file_reader(file_path: str) -> str:
         return f.read()
 
 
+def glob_match(pattern: str, path: str) -> bool:
+    """
+    Match a file path against a glob pattern.
+
+    Supports standard glob patterns:
+    - * matches any number of characters except /
+    - ** matches any number of directories (zero or more)
+    - ? matches a single character except /
+    - [seq] matches any character in seq
+
+    :param pattern: Glob pattern (e.g., 'src/**/*.py', '**agent.py')
+    :param path: File path to match against
+    :return: True if path matches pattern
+    """
+    pattern = pattern.replace("\\", "/")  # Normalize backslashes to forward slashes
+    path = path.replace("\\", "/")  # Normalize path backslashes to forward slashes
+
+    # Handle ** patterns that should match zero or more directories
+    if "**" in pattern:
+        # Method 1: Standard fnmatch (matches one or more directories)
+        regex1 = fnmatch.translate(pattern)
+        if re.match(regex1, path):
+            return True
+
+        # Method 2: Handle zero-directory case by removing /** entirely
+        # Convert "src/**/test.py" to "src/test.py"
+        if "/**/" in pattern:
+            zero_dir_pattern = pattern.replace("/**/", "/")
+            regex2 = fnmatch.translate(zero_dir_pattern)
+            if re.match(regex2, path):
+                return True
+
+        # Method 3: Handle leading ** case by removing **/
+        # Convert "**/test.py" to "test.py"
+        if pattern.startswith("**/"):
+            zero_dir_pattern = pattern[3:]  # Remove "**/"
+            regex3 = fnmatch.translate(zero_dir_pattern)
+            if re.match(regex3, path):
+                return True
+
+        return False
+    else:
+        # Simple pattern without **, use fnmatch directly
+        return fnmatch.fnmatch(path, pattern)
+
+
 def search_files(
-    file_paths: list[str],
-    pattern: re.Pattern | str,
+    relative_file_paths: list[str],
+    pattern: str,
+    root_path: str = "",
     file_reader: Callable[[str], str] = default_file_reader,
     context_lines_before: int = 0,
     context_lines_after: int = 0,
@@ -261,8 +300,9 @@ def search_files(
     """
     Search for a pattern in a list of files.
 
-    :param file_paths: List of files in which to search
+    :param relative_file_paths: List of relative file paths in which to search
     :param pattern: Pattern to search for
+    :param root_path: Root path to resolve relative paths against (by default, current working directory).
     :param file_reader: Function to read a file, by default will just use os.open.
         All files that can't be read by it will be skipped.
     :param context_lines_before: Number of context lines to include before matches
@@ -272,15 +312,13 @@ def search_files(
     :return: List of MatchedConsecutiveLines objects
     """
     # Pre-filter paths (done sequentially to avoid overhead)
-    include_spec = PathSpec.from_lines(GitWildMatchPattern, [paths_include_glob]) if paths_include_glob else None
-    exclude_spec = PathSpec.from_lines(GitWildMatchPattern, [paths_exclude_glob]) if paths_exclude_glob else None
-
+    # Use proper glob matching instead of gitignore patterns
     filtered_paths = []
-    for path in file_paths:
-        if include_spec and not include_spec.match_file(path):
+    for path in relative_file_paths:
+        if paths_include_glob and not glob_match(paths_include_glob, path):
             log.debug(f"Skipping {path}: does not match include pattern {paths_include_glob}")
             continue
-        if exclude_spec and exclude_spec.match_file(path):
+        if paths_exclude_glob and glob_match(paths_exclude_glob, path):
             log.debug(f"Skipping {path}: matches exclude pattern {paths_exclude_glob}")
             continue
         filtered_paths.append(path)
@@ -290,7 +328,8 @@ def search_files(
     def process_single_file(path: str) -> dict[str, Any]:
         """Process a single file - this function will be parallelized."""
         try:
-            file_content = file_reader(path)
+            abs_path = os.path.join(root_path, path)
+            file_content = file_reader(abs_path)
             search_results = search_text(
                 pattern,
                 content=file_content,
