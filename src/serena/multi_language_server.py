@@ -222,7 +222,7 @@ class MultiLanguageServer:
         server = self._server_for_path(relative_file_path)
         lang = self._language_for_path(relative_file_path)
         log.info("Deleting text in %s from %d:%d to %d:%d using %s language server", 
-                relative_file_path, start.line, start.column, end.line, end.column,
+                relative_file_path, start['line'], start['character'], end['line'], end['character'],
                 lang.value if lang else 'fallback')
         return server.delete_text_between_positions(relative_file_path, start, end)
 

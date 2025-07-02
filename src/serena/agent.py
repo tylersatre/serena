@@ -2648,7 +2648,7 @@ class SearchForPatternTool(Tool):
             log.error("SearchForPatternTool: Path %s does not exist", relative_path)
             raise FileNotFoundError(f"Relative path {relative_path} does not exist.")
 
-        if restrict_search_to_code_files:
+        if restrict_search_to_code_files or language is not None:
             log.debug("SearchForPatternTool: Using language server search (code files only)")
             lang_enum = Language(language.lower()) if language is not None else None
             matches = self.language_server.search_files_for_pattern(
