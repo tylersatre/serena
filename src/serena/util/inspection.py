@@ -28,7 +28,7 @@ def determine_programming_language_composition(repo_path: str, rel_path_to_gitig
     :return: Dictionary mapping language names to percentages of files matching each language
     """
     log.debug("Determining programming language composition for: %s", repo_path)
-    
+
     all_files = find_all_non_ignored_files(repo_path)
 
     if not all_files:
@@ -59,6 +59,6 @@ def determine_programming_language_composition(repo_path: str, rel_path_to_gitig
     for language_name, count in language_counts.items():
         percentage = (count / total_files) * 100
         language_percentages[language_name] = round(percentage, 2)
-    
+
     log.info("Language composition analysis complete: %s", language_percentages)
     return language_percentages

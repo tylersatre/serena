@@ -1,7 +1,7 @@
 import json
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pytest
 
@@ -17,8 +17,9 @@ class SerenaConfigForTests(SerenaConfigBase):
     In-memory implementation of Serena configuration with the GUI disabled.
     """
 
-    gui_log_window_enabled: bool = False
-    web_dashboard: bool = False
+    gui_log_window_enabled: bool = field(default=False)
+    web_dashboard: bool = field(default=False)
+    web_dashboard_open_on_launch: bool = field(default=False)
 
     def __post_init__(self):
         # Initialize with empty projects list if not already set

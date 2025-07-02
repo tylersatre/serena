@@ -524,25 +524,29 @@ class SymbolManager:
         The only parameter not mentioned there is `within_relative_path`, which can be used to restrict the search
         to symbols within a specific file or directory.
         """
-        log.debug("SymbolManager.find_by_name: Searching for '%s' (path: %s, language: %s, substring: %s)",
-                 name_path, within_relative_path or 'all', language.value if language else 'all', substring_matching)
-        
+        log.debug(
+            "SymbolManager.find_by_name: Searching for '%s' (path: %s, language: %s, substring: %s)",
+            name_path,
+            within_relative_path or "all",
+            language.value if language else "all",
+            substring_matching,
+        )
+
         symbols: list[Symbol] = []
         symbol_roots = self._lang_server.request_full_symbol_tree(
             within_relative_path=within_relative_path, include_body=include_body, language=language
         )
-        
+
         log.debug("SymbolManager.find_by_name: Got %d symbol roots to search", len(symbol_roots))
-        
+
         for root in symbol_roots:
             matching_symbols = Symbol(root).find(
                 name_path, include_kinds=include_kinds, exclude_kinds=exclude_kinds, substring_matching=substring_matching
             )
             if matching_symbols:
-                log.debug("Found %d matches in %s", len(matching_symbols), 
-                         root.get("location", {}).get("relativePath", "unknown"))
+                log.debug("Found %d matches in %s", len(matching_symbols), root.get("location", {}).get("relativePath", "unknown"))
             symbols.extend(matching_symbols)
-        
+
         log.debug("SymbolManager.find_by_name: Total symbols found: %d", len(symbols))
         return symbols
 
@@ -582,9 +586,13 @@ class SymbolManager:
         :param exclude_kinds: which kinds of symbols to exclude from the result.
         :param language: optional language filter to only include references from files of that language.
         """
-        log.debug("SymbolManager.find_referencing_symbols: Searching references for '%s' in %s (language filter: %s)",
-                 name_path, relative_file_path, language.value if language else 'none')
-        
+        log.debug(
+            "SymbolManager.find_referencing_symbols: Searching references for '%s' in %s (language filter: %s)",
+            name_path,
+            relative_file_path,
+            language.value if language else "none",
+        )
+
         symbol_candidates = self.find_by_name(name_path, substring_matching=False, within_relative_path=relative_file_path)
         if len(symbol_candidates) == 0:
             log.warning(f"No symbol with name {name_path} found in file {relative_file_path}")
@@ -598,7 +606,7 @@ class SymbolManager:
             )
         symbol = symbol_candidates[0]
         log.debug("Found symbol at %s:%s:%s", symbol.location.relative_path, symbol.location.line, symbol.location.column)
-        
+
         return self.find_referencing_symbols_by_location(
             symbol.location, include_body=include_body, include_kinds=include_kinds, exclude_kinds=exclude_kinds, language=language
         )
@@ -627,16 +635,20 @@ class SymbolManager:
         :param language: optional language filter to only include references from files of that language.
         :return: a list of symbols that reference the given symbol
         """
-        log.debug("SymbolManager.find_referencing_symbols_by_location: Searching references at %s:%s:%s (language filter: %s)",
-                 symbol_location.relative_path, symbol_location.line, symbol_location.column,
-                 language.value if language else 'none')
-        
+        log.debug(
+            "SymbolManager.find_referencing_symbols_by_location: Searching references at %s:%s:%s (language filter: %s)",
+            symbol_location.relative_path,
+            symbol_location.line,
+            symbol_location.column,
+            language.value if language else "none",
+        )
+
         if not symbol_location.has_position_in_file():
             raise ValueError("Symbol location does not contain a valid position in a file")
         assert symbol_location.relative_path is not None
         assert symbol_location.line is not None
         assert symbol_location.column is not None
-        
+
         references = self._lang_server.request_referencing_symbols(
             relative_file_path=symbol_location.relative_path,
             line=symbol_location.line,
@@ -647,7 +659,7 @@ class SymbolManager:
             include_file_symbols=True,
             language=language,
         )
-        
+
         log.debug("Found %d total references before filtering", len(references))
 
         if include_kinds is not None:
