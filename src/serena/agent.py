@@ -10,6 +10,7 @@ import re
 import shutil
 import sys
 import threading
+import time
 import traceback
 import webbrowser
 from abc import ABC, abstractmethod
@@ -25,7 +26,6 @@ from pathlib import Path
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Literal, Self, TypeVar, Union, cast
 
-import click
 import yaml
 from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata, func_metadata
 from overrides import override
@@ -169,6 +169,11 @@ class ProjectConfig(ToStringMixin):
             )
         sorted_languages = sorted(language_composition.keys(), key=lambda lang: language_composition[lang], reverse=True)
         log.info(f"Detected languages for {project_root}: {sorted_languages}")
+        
+        # Log language percentages
+        for lang in sorted_languages[:5]:  # Show top 5 languages
+            percentage = (language_composition[lang] / sum(language_composition.values())) * 100
+            log.debug(f"  {lang}: {language_composition[lang]} files ({percentage:.1f}%)")
         config_with_comments = load_yaml(PROJECT_TEMPLATE_FILE, preserve_comments=True)
         config_with_comments["project_name"] = project_name
         config_with_comments["languages"] = sorted_languages
@@ -690,12 +695,25 @@ def create_multi_ls_for_project(
     :param trace_lsp_communication: whether to trace LSP communication
     :return: the multi-language server
     """
+    log.info("Creating MultiLanguageServer for project")
+    
     if isinstance(project, str):
+        log.debug("Loading project from path: %s", project)
         project_instance = Project.load(project, autogenerate=True)
     else:
         project_instance = project
+    
+    log.info("Project: %s at %s", project_instance.project_name, project_instance.project_root)
 
     project_config = project_instance.project_config
+    configured_languages = project_config.languages
+    log.info("Configured languages: %s", [lang.value for lang in configured_languages])
+    
+    # Analyze actual language composition
+    log.debug("Analyzing actual language composition in project")
+    language_composition = determine_programming_language_composition(str(project_instance.project_root))
+    log.info("Detected language composition: %s", language_composition)
+    
     ignored_paths = project_config.ignored_paths
     if len(ignored_paths) > 0:
         log.info(f"Using {len(ignored_paths)} ignored paths from the explicit project configuration.")
@@ -713,21 +731,31 @@ def create_multi_ls_for_project(
     servers: dict[Language, SolidLanguageServer] = {}
     ls_logger = LanguageServerLogger(log_level=log_level)
     
-    for lang in project_config.languages:
+    log.info("Creating %d language server(s)", len(configured_languages))
+    for lang in configured_languages:
         multilspy_config = LanguageServerConfig(
             code_language=lang,
             ignored_paths=ignored_paths,
             trace_lsp_communication=trace_lsp_communication,
         )
-        log.info(f"Creating language server instance for {lang.value} at {project_instance.project_root}.")
-        server = SolidLanguageServer.create(
-            multilspy_config,
-            ls_logger,
-            project_instance.project_root,
-            timeout=ls_timeout,
-        )
-        servers[lang] = server
+        log.info(f"Creating {lang.value} language server instance for project at {project_instance.project_root}")
+        log.debug(f"Language server config for {lang.value}: log_level={log_level}, timeout={ls_timeout}, trace_lsp={trace_lsp_communication}")
+        
+        try:
+            server = SolidLanguageServer.create(
+                multilspy_config,
+                ls_logger,
+                project_instance.project_root,
+                timeout=ls_timeout,
+            )
+            servers[lang] = server
+            log.debug(f"Successfully created {lang.value} language server instance")
+        except Exception as e:
+            log.exception(f"Failed to create {lang.value} language server: %s", e)
+            raise
     
+    log.info("Successfully created MultiLanguageServer with %d language server(s): %s", 
+            len(servers), ", ".join(lang.value for lang in servers.keys()))
     return MultiLanguageServer(servers)
 
 def create_ls_for_project(
@@ -765,9 +793,6 @@ def create_ls_for_project(
     return multi_ls.get_server(primary_language)
 
 
-@click.command()
-@click.argument("project", type=click.Path(exists=True), required=False, default=os.getcwd())
-@click.option("--log-level", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]), default="WARNING")
 def index_project(project: str, log_level: str = "INFO") -> None:
     """
     Index a project by saving the symbols of files to Serena's language server cache.
@@ -776,26 +801,59 @@ def index_project(project: str, log_level: str = "INFO") -> None:
     :param project: the project to index. By default, the current working directory is used.
     """
     log_level_int = logging.getLevelNamesMapping()[log_level.upper()]
+    
+    # Configure logging for the indexing operation
+    logging.basicConfig(level=log_level_int, format=SERENA_LOG_FORMAT)
+    
     project = os.path.abspath(project)
+    log.info("Starting project indexing for: %s", project)
     print(f"Indexing symbols in project {project}")
     
     # Load project to get language configuration
+    log.debug("Loading project configuration")
     project_instance = Project.load(project, autogenerate=True)
     languages_str = ", ".join(lang.value for lang in project_instance.project_config.languages)
+    log.info("Project '%s' configured with %d language(s): %s", 
+            project_instance.project_name, len(project_instance.project_config.languages), languages_str)
     print(f"Detected languages: {languages_str}")
     
+    # Analyze actual language composition
+    log.debug("Analyzing actual file distribution in project")
+    language_composition = determine_programming_language_composition(str(project))
+    if language_composition:
+        log.info("Actual file distribution:")
+        for lang, percentage in sorted(language_composition.items(), key=lambda x: x[1], reverse=True)[:5]:
+            log.info("  %s: %.1f%%", lang, percentage)
+    
     # Create multi-language server
+    log.info("Creating MultiLanguageServer for indexing")
     multi_ls = create_multi_ls_for_project(project, log_level=log_level_int)
     
     # Start and index each language server
     cache_paths = []
-    for lang, server in multi_ls._servers.items():
-        print(f"Indexing {lang.value} files...")
-        with server.start_server():
-            server.index_repository()
-        cache_paths.append(f"  - {lang.value}: {server.cache_path}")
+    total_start_time = time.time()
     
-    print(f"Indexing complete! Symbols saved to:")
+    for lang, server in multi_ls._servers.items():
+        lang_start_time = time.time()
+        print(f"Indexing {lang.value} files...")
+        log.info("Starting %s language server for indexing", lang.value)
+        
+        try:
+            with server.start_server():
+                log.debug("Indexing repository for %s", lang.value)
+                server.index_repository()
+            cache_paths.append(f"  - {lang.value}: {server.cache_path}")
+            
+            elapsed = time.time() - lang_start_time
+            log.info("Completed indexing %s files in %.2f seconds", lang.value, elapsed)
+        except Exception as e:
+            log.exception("Failed to index %s files: %s", lang.value, e)
+            print(f"  ERROR: Failed to index {lang.value} files: {e}")
+    
+    total_elapsed = time.time() - total_start_time
+    log.info("Total indexing completed in %.2f seconds", total_elapsed)
+    
+    print("Indexing complete! Symbols saved to:")
     for path in cache_paths:
         print(path)
 
@@ -1215,33 +1273,46 @@ class SerenaAgent:
 
     def get_language_statistics(self) -> dict[str, Any]:
         """Get detailed language statistics for the current project."""
+        log.info("Getting language statistics for current project")
+        
         if not self._active_project:
+            log.warning("Cannot get language statistics - no active project")
             return {"error": "No active project"}
 
         project_root = self.get_project_root()
+        log.debug("Analyzing language composition for project root: %s", project_root)
+        
         language_composition = determine_programming_language_composition(str(project_root))
+        log.debug("Raw language composition: %s", language_composition)
 
         # Count total files and calculate percentages
         total_files = sum(language_composition.values())
         if total_files == 0:
+            log.warning("No files found in project for language analysis")
             return {"languages": {}, "total_files": 0}
 
         # Create detailed statistics
+        configured_langs = [lang.value for lang in self._active_project.project_config.languages] if self._active_project else []
+        log.debug("Configured languages: %s", configured_langs)
+        
         stats: dict[str, Any] = {
             "languages": {},
             "total_files": total_files,
-            "configured_languages": [lang.value for lang in self._active_project.project_config.languages] if self._active_project else [],
+            "configured_languages": configured_langs,
         }
 
         # Calculate percentage and common patterns for each language
         for lang, count in sorted(language_composition.items(), key=lambda x: x[1], reverse=True):
             percentage = (count / total_files) * 100
+            log.debug("Language %s: %d files (%.1f%%)", lang, count, percentage)
             stats["languages"][lang] = {
                 "file_count": count,
                 "percentage": round(percentage, 1),
                 "common_patterns": self._get_common_file_patterns(lang),
             }
 
+        log.info("Language statistics complete: %d total files across %d languages", 
+                total_files, len(stats["languages"]))
         return stats
 
     def _get_common_file_patterns(self, language: str) -> list[str]:
@@ -1267,6 +1338,8 @@ class SerenaAgent:
         """
         Starts/resets the language server for the current project
         """
+        log.info("Resetting language server for project")
+        
         tool_timeout = self.serena_config.tool_timeout
         if tool_timeout is not None and tool_timeout >= 0:
             if tool_timeout < 10:
@@ -1281,36 +1354,52 @@ class SerenaAgent:
 
         # instantiate and start the language server
         assert self._active_project is not None
+        project_name = self._active_project.project_name
+        project_root = self._active_project.project_root
+        configured_languages = self._active_project.project_config.languages
+        
+        log.info(f"Preparing to start language servers for project '{project_name}' with {len(configured_languages)} language(s): {', '.join(lang.value for lang in configured_languages)}")
+        
         ignored_paths = self._active_project.project_config.ignored_paths
         if len(ignored_paths) > 0:
             log.info(f"Using {len(ignored_paths)} ignored paths from the explicit project configuration.")
             log.debug(f"Ignored paths: {ignored_paths}")
         if self._active_project.project_config.ignore_all_files_in_gitignore:
-            log.info(f"Parsing all gitignore files in {self._active_project.project_root}")
-            gitignore_parser = GitignoreParser(self._active_project.project_root)
+            log.info(f"Parsing all gitignore files in {project_root}")
+            gitignore_parser = GitignoreParser(project_root)
             log.info(f"Found {len(gitignore_parser.get_ignore_specs())} gitignore files.")
             for spec in gitignore_parser.get_ignore_specs():
                 log.debug(f"Adding {len(spec.patterns)} patterns from {spec.file_path} to the ignored paths.")
                 ignored_paths.extend(spec.patterns)
         log.debug(f"Using {len(ignored_paths)} ignored paths in total.")
+        
         servers: dict[Language, SolidLanguageServer] = {}
         ls_logger = LanguageServerLogger(log_level=self.serena_config.log_level)
-        for lang in self._active_project.project_config.languages:
+        
+        for lang in configured_languages:
             ls_config = LanguageServerConfig(
                 code_language=lang,
                 ignored_paths=list(ignored_paths),
                 trace_lsp_communication=self.serena_config.trace_lsp_communication,
             )
-            log.info(f"Starting language server for {lang.value} at {self._active_project.project_root}.")
-            server = SolidLanguageServer.create(ls_config, ls_logger, self._active_project.project_root)
-            server.start()
-            if not server.is_running():
-                raise RuntimeError(f"Failed to start the language server for {lang.value} at {self._active_project.project_root}")
-            servers[lang] = server
+            log.info(f"Starting {lang.value} language server for project at {project_root}")
+            log.debug(f"Language server config for {lang.value}: trace_lsp={self.serena_config.trace_lsp_communication}")
+            
+            try:
+                server = SolidLanguageServer.create(ls_config, ls_logger, project_root)
+                server.start()
+                if not server.is_running():
+                    log.error(f"Language server for {lang.value} failed to start properly")
+                    raise RuntimeError(f"Failed to start the language server for {lang.value} at {project_root}")
+                servers[lang] = server
+                log.info(f"Successfully started {lang.value} language server")
+            except Exception as e:
+                log.exception(f"Error starting {lang.value} language server: %s", e)
+                raise
 
         self.language_server = MultiLanguageServer(servers)
         languages_started = ", ".join(lang.value for lang in servers.keys())
-        log.info(f"Successfully initialized MultiLanguageServer with {len(servers)} language(s): {languages_started}")
+        log.info(f"Successfully initialized MultiLanguageServer with {len(servers)} language server(s): {languages_started} for project '{project_name}'")
 
     def get_tool(self, tool_class: type[TTool]) -> TTool:
         return self._all_tools[tool_class]  # type: ignore
@@ -1749,13 +1838,23 @@ class GetSymbolsOverviewTool(Tool):
             only files for that language will be included in the overview.
         :return: a JSON object mapping relative paths of all contained files to info about top-level symbols in the file (name_path, kind).
         """
+        log.info("GetSymbolsOverviewTool: Getting overview for %s (language: %s)", 
+                relative_path, language or 'all')
+        
         lang_enum = Language(language.lower()) if language is not None else None
         path_to_symbol_infos = self.language_server.request_overview(relative_path, language=lang_enum)
+        
+        log.debug("GetSymbolsOverviewTool: Retrieved overview for %d files", len(path_to_symbol_infos))
+        
         result = {}
+        total_symbols = 0
         for file_path, symbols in path_to_symbol_infos.items():
             # TODO: maybe include not just top-level symbols? We could filter by kind to exclude variables
             #  The language server methods would need to be adjusted for this.
             result[file_path] = [{"name_path": symbol[0], "kind": int(symbol[1])} for symbol in symbols]
+            total_symbols += len(symbols)
+        
+        log.debug("GetSymbolsOverviewTool: Total top-level symbols found: %d", total_symbols)
 
         result_json_str = json.dumps(result)
         return self._limit_length(result_json_str, max_answer_chars)
@@ -1826,9 +1925,18 @@ class FindSymbolTool(Tool):
         :param max_answer_chars: Max characters for the JSON result. If exceeded, no content is returned.
         :return: JSON string: a list of symbols (with locations) matching the name.
         """
+        log.info("FindSymbolTool: Searching for '%s' (path: %s, language: %s, depth: %d, include_body: %s, substring: %s)",
+                name_path, relative_path or 'all', language or 'all', depth, include_body, substring_matching)
+        
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
         lang_enum = Language(language.lower()) if language is not None else None
+        
+        if parsed_include_kinds:
+            log.debug("Including symbol kinds: %s", [k.name for k in parsed_include_kinds])
+        if parsed_exclude_kinds:
+            log.debug("Excluding symbol kinds: %s", [k.name for k in parsed_exclude_kinds])
+            
         symbols = self.symbol_manager.find_by_name(
             name_path,
             include_body=include_body,
@@ -1838,6 +1946,9 @@ class FindSymbolTool(Tool):
             within_relative_path=relative_path,
             language=lang_enum,
         )
+        
+        log.debug("FindSymbolTool: Found %d symbols matching '%s'", len(symbols), name_path)
+        
         symbol_dicts = [_sanitize_symbol_dict(s.to_dict(kind=True, location=True, depth=depth, include_body=include_body)) for s in symbols]
         result = json.dumps(symbol_dicts)
         return self._limit_length(result, max_answer_chars)
@@ -1873,10 +1984,19 @@ class FindReferencingSymbolsTool(Tool):
             only references from files of that language will be included.
         :return: a list of JSON objects with the symbols referencing the requested symbol
         """
+        log.info("FindReferencingSymbolsTool: Finding references to '%s' in %s (language filter: %s)",
+                name_path, relative_path, language or 'none')
+        
         include_body = False  # It is probably never a good idea to include the body of the referencing symbols
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
         lang_enum = Language(language.lower()) if language is not None else None
+        
+        if parsed_include_kinds:
+            log.debug("Including reference kinds: %s", [k.name for k in parsed_include_kinds])
+        if parsed_exclude_kinds:
+            log.debug("Excluding reference kinds: %s", [k.name for k in parsed_exclude_kinds])
+        
         references_in_symbols = self.symbol_manager.find_referencing_symbols(
             name_path,
             relative_file_path=relative_path,
@@ -1885,6 +2005,10 @@ class FindReferencingSymbolsTool(Tool):
             exclude_kinds=parsed_exclude_kinds,
             language=lang_enum,
         )
+        
+        log.debug("FindReferencingSymbolsTool: Found %d references to '%s'", 
+                 len(references_in_symbols), name_path)
+        
         reference_dicts = []
         for ref in references_in_symbols:
             ref_dict = ref.symbol.to_dict(kind=True, location=True, depth=0, include_body=include_body)
@@ -2213,16 +2337,23 @@ class GetLanguageStatisticsTool(Tool):
 
         :return: JSON string containing language statistics
         """
+        log.info("GetLanguageStatisticsTool: Analyzing project language composition")
+        
         stats = self.agent.get_language_statistics()
 
         if "error" in stats:
+            log.error("GetLanguageStatisticsTool: Error getting statistics: %s", stats["error"])
             return stats["error"]
+
+        log.debug("GetLanguageStatisticsTool: Found %d total files across %d languages", 
+                 stats['total_files'], len(stats['languages']))
 
         # Format the output as a readable report
         lines = ["# Language Statistics\n"]
 
         if stats["configured_languages"]:
             lines.append(f"Configured languages: {', '.join(stats['configured_languages'])}\n")
+            log.debug("Configured languages: %s", stats['configured_languages'])
 
         lines.append(f"Total files analyzed: {stats['total_files']}\n")
 
@@ -2230,6 +2361,7 @@ class GetLanguageStatisticsTool(Tool):
             lines.append("\n## Language Distribution:\n")
             for lang, data in stats["languages"].items():
                 lines.append(f"- **{lang.capitalize()}**: {data['file_count']} files ({data['percentage']}%)")
+                log.debug("Language %s: %d files (%.1f%%)", lang, data['file_count'], data['percentage'])
                 if data["common_patterns"]:
                     lines.append(f"  - Common patterns: {', '.join(data['common_patterns'])}")
                 lines.append("")
@@ -2239,6 +2371,7 @@ class GetLanguageStatisticsTool(Tool):
         if workflow_suggestions:
             lines.append("\n## Suggested Workflows:\n")
             lines.extend(workflow_suggestions)
+            log.debug("Added %d workflow suggestions", len(workflow_suggestions))
 
         return "\n".join(lines)
 
@@ -2484,11 +2617,18 @@ class SearchForPatternTool(Tool):
             only files for that language will be searched. Only applies when restrict_search_to_code_files is True.
         :return: A JSON object mapping file paths to lists of matched consecutive lines (with context, if requested).
         """
+        log.info("SearchForPatternTool: Searching for pattern '%s' (path: %s, language: %s, code_only: %s, include_glob: %s, exclude_glob: %s)",
+                substring_pattern[:50] + '...' if len(substring_pattern) > 50 else substring_pattern,
+                relative_path or 'all', language or 'all', restrict_search_to_code_files,
+                paths_include_glob, paths_exclude_glob)
+        
         abs_path = os.path.join(self.get_project_root(), relative_path)
         if not os.path.exists(abs_path):
+            log.error("SearchForPatternTool: Path %s does not exist", relative_path)
             raise FileNotFoundError(f"Relative path {relative_path} does not exist.")
 
         if restrict_search_to_code_files:
+            log.debug("SearchForPatternTool: Using language server search (code files only)")
             lang_enum = Language(language.lower()) if language is not None else None
             matches = self.language_server.search_files_for_pattern(
                 pattern=substring_pattern,
@@ -2500,8 +2640,10 @@ class SearchForPatternTool(Tool):
                 language=lang_enum,
             )
         else:
+            log.debug("SearchForPatternTool: Using general file search (all non-ignored files)")
             if os.path.isfile(abs_path):
                 rel_paths_to_search = [relative_path]
+                log.debug("SearchForPatternTool: Searching single file: %s", relative_path)
             else:
                 dirs, rel_paths_to_search = scan_directory(
                     path=abs_path,
@@ -2510,6 +2652,8 @@ class SearchForPatternTool(Tool):
                     is_ignored_file=self.agent.path_is_gitignored,
                     relative_to=self.get_project_root(),
                 )
+                log.debug("SearchForPatternTool: Searching %d files in directory %s", 
+                         len(rel_paths_to_search), relative_path)
             # TODO (maybe): not super efficient to walk through the files again and filter if glob patterns are provided
             #   but it probably never matters and this version required no further refactoring
             matches = search_files(
@@ -2519,11 +2663,16 @@ class SearchForPatternTool(Tool):
                 paths_include_glob=paths_include_glob,
                 paths_exclude_glob=paths_exclude_glob,
             )
+        
         # group matches by file
         file_to_matches: dict[str, list[str]] = defaultdict(list)
         for match in matches:
             assert match.source_file_path is not None
             file_to_matches[match.source_file_path].append(match.to_display_string())
+        
+        log.info("SearchForPatternTool: Found matches in %d files, total %d matches", 
+                len(file_to_matches), len(matches))
+        
         result = json.dumps(file_to_matches)
         return self._limit_length(result, max_answer_chars)
 

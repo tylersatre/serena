@@ -1,15 +1,16 @@
 import json
-import pytest
 from pathlib import Path
 
+import pytest
+
 from serena.agent import (
-    FindSymbolTool, 
-    GetLanguageStatisticsTool, 
+    FindSymbolTool,
+    GetLanguageStatisticsTool,
     GetSymbolsOverviewTool,
     ProjectConfig,
     SearchForPatternTool,
     SerenaAgent,
-    SerenaConfigBase
+    SerenaConfigBase,
 )
 from serena.util.general import save_yaml
 from solidlsp.ls_config import Language
@@ -275,7 +276,6 @@ def test_missing_language_server_handling():
     # This test would require mocking a missing language server
     # For now, we'll test the behavior with an unsupported file type
     import tempfile
-    import shutil
     
     with tempfile.TemporaryDirectory() as temp_dir:
         # Create a project with an unsupported file type
