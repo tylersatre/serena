@@ -13,8 +13,14 @@ prompts:
     You need to identify at least the following information:
     * the project's purpose
     * the tech stack used
+    * the programming languages used in the project (e.g., Python, TypeScript, Java, etc.)
+      - For multi-language projects, identify the primary languages and their roles
+      - Note the file distribution across languages
+      - Identify language-specific conventions and patterns
     * the code style and conventions used (including naming, type hints, docstrings, etc.)
+      - For multi-language projects, note language-specific conventions
     * which commands to run when a task is completed (linting, formatting, testing, etc.)
+      - Include language-specific commands where applicable
     * the rough structure of the codebase
     * the commands for testing, formatting, and linting
     * the commands for running the entrypoints of the project
@@ -25,6 +31,7 @@ prompts:
     This list is not exhaustive, you can add more information if you think it is relevant.
 
     For doing that, you will need to acquire information about the project with the corresponding tools.
+    Use the `get_language_statistics` tool early in the process to understand the language composition of the project.
     Read only the necessary files and directories to avoid loading too much data into memory.
     If you cannot find everything you need from the project itself, you should ask the user for more information.
 
@@ -33,6 +40,19 @@ prompts:
     a list of commands that the user should know about to develop code in this project.
     Moreover, you should create memory files for the style and conventions and a dedicated memory file for
     what should be done when a task is completed.
+    
+    After analyzing the project structure, create a dedicated memory file called `project_languages.md` that includes:
+    * The languages detected in the project and their primary uses
+    * File distribution statistics (e.g., "60% Python files, 30% TypeScript files, 10% config files")
+    * Language-specific tool usage patterns (e.g., using the `language` parameter in `find_symbol`)
+    * Suggested workflows for multi-language development:
+      - For Python/TypeScript: Frontend/backend separation patterns
+      - For Java/Python: Service integration patterns
+      - For any combination: Cross-language debugging tips
+    * Cross-language integration points and patterns
+    * Language-specific testing and build processes
+    * Common file patterns for each language (e.g., "Python: src/**/*.py, tests/**/*.py")
+    
     **Important**: after done with the onboarding task, remember to call the `write_memory` to save the collected information!
 
   think_about_collected_information: |

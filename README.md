@@ -6,6 +6,7 @@
 * :rocket: Serena is a powerful **coding agent toolkit** capable of turning an LLM into a fully-featured agent that works **directly on your codebase**.
 * :wrench: Serena provides essential **semantic code retrieval and editing tools** that are akin to an IDE's capabilities, extracting code entities at the symbol level and exploiting relational structure.
 * :free: Serena is **free & open-source**, enhancing the capabilities of LLMs you already have access to free of charge.
+* :globe_with_meridians: Serena supports **multiple programming languages** in a single project, automatically managing language servers for Python, TypeScript, Java, C#, Rust, Go, C++, Ruby, PHP, and more.
 
 ### Demonstration
 
@@ -85,6 +86,44 @@ With Serena, we provide
        
 Further languages can, in principle, easily be supported by providing a shallow adapter for a new language server
 implementation.
+
+#### Multiple Language Support
+
+Serena automatically detects and manages multiple programming languages within a single project. This means you can work seamlessly with projects that combine different languages, such as:
+- Python backend with TypeScript/JavaScript frontend
+- Java services with Python data processing scripts
+- Mixed C++ and Python projects with binding layers
+- Any other combination of supported languages
+
+**How it works:**
+- When you activate a project, Serena automatically detects all programming languages used
+- A separate language server is started for each detected language
+- Files are automatically routed to the appropriate language server based on their extension
+- You can specify languages explicitly in your project configuration if needed
+
+**Using language-specific tools:**
+Several tools support a `language` parameter to filter results by programming language:
+- `find_symbol` - Search for symbols in specific languages
+- `get_symbols_overview` - Get overview of symbols filtered by language
+- `search_for_pattern` - Search patterns in files of specific languages
+
+Example usage:
+```
+"Find all Python classes that inherit from BaseModel"
+"Show me the TypeScript interfaces in the frontend directory"
+"Search for Java methods that use the @Override annotation"
+```
+
+**Project configuration:**
+In your `.serena/project.yml`, you can specify multiple languages:
+```yaml
+languages:
+  - python
+  - typescript
+  - java
+```
+
+If not specified, languages will be auto-detected based on the files in your project.
 
 
 ## Table of Contents
@@ -822,10 +861,10 @@ Here is the full list of Serena's tools with a short description (output of `uv 
  * `execute_shell_command`: Executes a shell command.
  * `find_referencing_code_snippets`: Finds code snippets in which the symbol at the given location is referenced.
  * `find_referencing_symbols`: Finds symbols that reference the symbol at the given location (optionally filtered by type).
- * `find_symbol`: Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
+ * `find_symbol`: Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type and language).
  * `get_active_project`: Gets the name of the currently active project (if any) and lists existing projects
  * `get_current_config`: Prints the current configuration of the agent, including the active modes, tools, and context.
- * `get_symbols_overview`: Gets an overview of the top-level symbols defined in a given file or directory.
+ * `get_symbols_overview`: Gets an overview of the top-level symbols defined in a given file or directory (optionally filtered by language).
  * `initial_instructions`: Gets the initial instructions for the current project.
     Should only be used in settings where the system prompt cannot be set,
     e.g. in clients you have no control over, like Claude Desktop.
@@ -841,7 +880,7 @@ Here is the full list of Serena's tools with a short description (output of `uv 
  * `replace_lines`: Replaces a range of lines within a file with new content.
  * `replace_symbol_body`: Replaces the full definition of a symbol.
  * `restart_language_server`: Restarts the language server, may be necessary when edits not through Serena happen.
- * `search_for_pattern`: Performs a search for a pattern in the project.
+ * `search_for_pattern`: Performs a search for a pattern in the project (optionally filtered by language).
  * `summarize_changes`: Provides instructions for summarizing the changes made to the codebase.
  * `switch_modes`: Activates modes by providing a list of their names
  * `think_about_collected_information`: Thinking tool for pondering the completeness of collected information.

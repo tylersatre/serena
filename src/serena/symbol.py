@@ -9,9 +9,9 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Self, Union
 
 from sensai.util.string import ToStringMixin
 
-from multilspy.language_server import ReferenceInSymbol as LSPReferenceInSymbol
-from multilspy.multilspy_config import Language
-from multilspy.multilspy_types import Position, SymbolKind, UnifiedSymbolInformation
+from solidlsp.ls import ReferenceInSymbol as LSPReferenceInSymbol
+from solidlsp.ls_config import Language
+from solidlsp.ls_types import Position, SymbolKind, UnifiedSymbolInformation
 
 if TYPE_CHECKING:
     from .agent import SerenaAgent
@@ -508,13 +508,6 @@ class SymbolManager:
         self._lang_server = lang_server
         self.agent = agent
 
-    def set_language_server(self, lang_server: SolidLanguageServer) -> None:
-        """
-        Set the language server to use for symbol retrieval and editing operations.
-        This is useful if you want to change the language server after initializing the SymbolManager.
-        """
-        self._lang_server = lang_server
-
     def find_by_name(
         self,
         name_path: str,
@@ -532,7 +525,7 @@ class SymbolManager:
         to symbols within a specific file or directory.
         """
         symbols: list[Symbol] = []
-        symbol_roots = self.lang_server.request_full_symbol_tree(
+        symbol_roots = self._lang_server.request_full_symbol_tree(
             within_relative_path=within_relative_path, include_body=include_body, language=language
         )
         for root in symbol_roots:
@@ -565,6 +558,7 @@ class SymbolManager:
         include_body: bool = False,
         include_kinds: Sequence[SymbolKind] | None = None,
         exclude_kinds: Sequence[SymbolKind] | None = None,
+        language: Language | None = None,
     ) -> list[ReferenceInSymbol]:
         """
         Find all symbols that reference the symbol with the given name.
@@ -576,6 +570,7 @@ class SymbolManager:
             Not recommended, as the referencing symbols will often be files, and thus the bodies will be very long.
         :param include_kinds: which kinds of symbols to include in the result.
         :param exclude_kinds: which kinds of symbols to exclude from the result.
+        :param language: optional language filter to only include references from files of that language.
         """
         symbol_candidates = self.find_by_name(name_path, substring_matching=False, within_relative_path=relative_file_path)
         if len(symbol_candidates) == 0:
@@ -590,7 +585,7 @@ class SymbolManager:
             )
         symbol = symbol_candidates[0]
         return self.find_referencing_symbols_by_location(
-            symbol.location, include_body=include_body, include_kinds=include_kinds, exclude_kinds=exclude_kinds
+            symbol.location, include_body=include_body, include_kinds=include_kinds, exclude_kinds=exclude_kinds, language=language
         )
 
     def find_referencing_symbols_by_location(
@@ -599,6 +594,7 @@ class SymbolManager:
         include_body: bool = False,
         include_kinds: Sequence[SymbolKind] | None = None,
         exclude_kinds: Sequence[SymbolKind] | None = None,
+        language: Language | None = None,
     ) -> list[ReferenceInSymbol]:
         """
         Find all symbols that reference the symbol at the given location.
@@ -613,6 +609,7 @@ class SymbolManager:
             If provided, only symbols of the given kinds will be included in the result.
         :param exclude_kinds: If provided, symbols of the given kinds will be excluded from the result.
             Takes precedence over include_kinds.
+        :param language: optional language filter to only include references from files of that language.
         :return: a list of symbols that reference the given symbol
         """
         if not symbol_location.has_position_in_file():
@@ -628,6 +625,7 @@ class SymbolManager:
             include_self=False,
             include_body=include_body,
             include_file_symbols=True,
+            language=language,
         )
 
         if include_kinds is not None:
@@ -642,7 +640,7 @@ class SymbolManager:
     def _edited_file(self, relative_path: str) -> Iterator[None]:
         with self._lang_server.open_file(relative_path) as file_buffer:
             yield
-            root_path = self._lang_server.language_server.repository_root_path
+            root_path = self._lang_server.repository_root_path
             abs_path = os.path.join(root_path, relative_path)
             with open(abs_path, "w", encoding="utf-8") as f:
                 f.write(file_buffer.contents)
@@ -663,7 +661,7 @@ class SymbolManager:
 
     def _get_code_file_content(self, relative_path: str) -> str:
         """Get the content of a file using the language server."""
-        return self._lang_server.language_server.retrieve_full_file_content(relative_path)
+        return self._lang_server.retrieve_full_file_content(relative_path)
 
     def replace_body(self, name_path: str, relative_file_path: str, body: str, *, use_same_indentation: bool = True) -> None:
         """

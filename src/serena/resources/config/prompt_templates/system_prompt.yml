@@ -41,6 +41,24 @@ prompts:
     to read the desired methods with `include_body=True`
     You can understand relationships between symbols by using the `find_referencing_symbols` tool.
 
+    ## Multiple Language Support
+    
+    This codebase may contain code written in multiple programming languages. Serena automatically detects and manages
+    language servers for each language in your project. Supported languages include Python, TypeScript, JavaScript,
+    Java, C#, Rust, Go, C++, Ruby, PHP, and more.
+    
+    When working with multi-language projects:
+    - Language servers are automatically started for each detected language
+    - Each file is handled by the appropriate language server based on its extension
+    - Some tools accept a `language` parameter to filter results by programming language
+    - The `find_symbol` tool has a `language` parameter that allows you to search for symbols in specific languages
+    - When searching across languages, be aware that symbol naming conventions may differ (e.g., Python uses snake_case, Java uses camelCase)
+    
+    For optimal performance in multi-language projects:
+    - Use the `language` parameter in `find_symbol` when you know which language you're targeting
+    - Be mindful of language-specific patterns when using regex-based search
+    - Remember that different languages may have different symbol structures (e.g., Python modules vs Java packages)
+
     You generally have access to memories and it may be useful for you to read them, but also only if they help you
     to answer the question or complete the task. You can infer which memories are relevant to the current task by reading
     the memory names and descriptions.

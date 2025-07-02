@@ -1,16 +1,15 @@
 import logging
 import os
-import re
 from collections.abc import Iterator
 from contextlib import contextmanager
 
 from pathspec import PathSpec
 
-from multilspy import SyncLanguageServer
-from multilspy.language_server import LSPFileBuffer, ReferenceInSymbol
-from multilspy.multilspy_config import Language
-from multilspy.multilspy_types import Position, UnifiedSymbolInformation
 from serena.text_utils import MatchedConsecutiveLines
+from solidlsp.ls import LSPFileBuffer, ReferenceInSymbol
+from solidlsp.ls import SolidLanguageServer as SyncLanguageServer
+from solidlsp.ls_config import Language
+from solidlsp.ls_types import Position, UnifiedSymbolInformation
 
 log = logging.getLogger(__name__)
 
@@ -52,14 +51,23 @@ class MultiLanguageServer:
         filename = os.path.basename(relative_path)
         for lang, server in self._servers.items():
             if lang.get_source_fn_matcher().is_relevant_filename(filename):
+                log.debug(f"Using {lang.value} language server for {relative_path}")
                 return server
-        log.debug("No specific language server for %s, using first", relative_path)
+        log.debug(f"No specific language server for {relative_path}, using {next(iter(self._servers.keys())).value}")
         return next(iter(self._servers.values()))
+
+    def _language_for_path(self, relative_path: str) -> Language | None:
+        filename = os.path.basename(relative_path)
+        for lang, server in self._servers.items():
+            if lang.get_source_fn_matcher().is_relevant_filename(filename):
+                return lang
+        return None
 
     @contextmanager
     def open_file(self, relative_file_path: str) -> Iterator[LSPFileBuffer]:
         server = self._server_for_path(relative_file_path)
-        log.debug("Opening %s with %s", relative_file_path, server)
+        lang = self._language_for_path(relative_file_path)
+        log.debug(f"Opening {relative_file_path} with {lang.value if lang else 'default'} language server")
         with server.open_file(relative_file_path) as fb:
             yield fb
 
@@ -94,9 +102,10 @@ class MultiLanguageServer:
         include_self: bool = False,
         include_body: bool = False,
         include_file_symbols: bool = False,
+        language: Language | None = None,
     ) -> list[ReferenceInSymbol]:
         server = self._server_for_path(relative_file_path)
-        return server.request_referencing_symbols(
+        references = server.request_referencing_symbols(
             relative_file_path=relative_file_path,
             line=line,
             column=column,
@@ -105,6 +114,18 @@ class MultiLanguageServer:
             include_body=include_body,
             include_file_symbols=include_file_symbols,
         )
+        
+        # Filter references by language if specified
+        if language is not None:
+            filtered_references = []
+            for ref in references:
+                # Get the relative path of the referencing symbol
+                ref_path = ref.symbol.get("location", {}).get("relativePath")
+                if ref_path and self._language_for_path(ref_path) == language:
+                    filtered_references.append(ref)
+            return filtered_references
+        
+        return references
 
     def retrieve_full_file_content(self, relative_file_path: str) -> str:
         server = self._server_for_path(relative_file_path)
@@ -126,30 +147,38 @@ class MultiLanguageServer:
 
     def search_files_for_pattern(
         self,
-        pattern: str | re.Pattern,
+        pattern: str,
+        relative_path: str = "",
         context_lines_before: int = 0,
         context_lines_after: int = 0,
         paths_include_glob: str | None = None,
         paths_exclude_glob: str | None = None,
+        language: Language | None = None,
     ) -> list[MatchedConsecutiveLines]:
         results: list[MatchedConsecutiveLines] = []
-        for server in self._servers.values():
-            results.extend(
-                server.search_files_for_pattern(
-                    pattern,
-                    context_lines_before,
-                    context_lines_after,
-                    paths_include_glob,
-                    paths_exclude_glob,
+        for lang, server in self._servers.items():
+            if language is None or lang == language:
+                results.extend(
+                    server.search_files_for_pattern(
+                        pattern,
+                        relative_path,
+                        context_lines_before,
+                        context_lines_after,
+                        paths_include_glob,
+                        paths_exclude_glob,
+                    )
                 )
-            )
         return results
 
-    def request_overview(self, within_relative_path: str) -> dict:
+    def request_overview(self, within_relative_path: str, language: Language | None = None) -> dict:
         if os.path.isfile(os.path.join(self.repository_root_path, within_relative_path)):
             server = self._server_for_path(within_relative_path)
-            return server.request_overview(within_relative_path)
+            if language is None or self._language_for_path(within_relative_path) == language:
+                return server.request_overview(within_relative_path)
+            else:
+                return {}
         results = {}
-        for server in self._servers.values():
-            results.update(server.request_overview(within_relative_path))
+        for lang, server in self._servers.items():
+            if language is None or lang == language:
+                results.update(server.request_overview(within_relative_path))
         return results

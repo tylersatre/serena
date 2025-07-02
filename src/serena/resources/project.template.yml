@@ -1,4 +1,9 @@
-# language of the project (csharp, python, rust, java, typescript, go, cpp, or ruby)
+# Languages used in the project (can specify multiple)
+# Supported: csharp, python, rust, java, typescript, go, cpp, ruby, php, clojure
+# Examples:
+#   Single language:  languages: [python]
+#   Multiple languages: languages: [python, typescript]
+# If not specified, languages will be auto-detected based on files in the project
 #  * For C, use cpp
 #  * For JavaScript, use typescript
 # Special requirements:
