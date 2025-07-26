@@ -125,10 +125,15 @@ class PathUtils:
             from urllib.parse import unquote, urlparse
             from urllib.request import url2pathname
         except ImportError:
-            # backwards compatibility
-            from urllib import unquote, url2pathname
+            # backwards compatibility (Python 2)
+            from urllib.parse import unquote as unquote_py2
+            from urllib.request import url2pathname as url2pathname_py2
 
-            from urlparse import urlparse
+            from urlparse import urlparse as urlparse_py2
+
+            unquote = unquote_py2
+            url2pathname = url2pathname_py2
+            urlparse = urlparse_py2
         parsed = urlparse(uri)
         host = f"{os.path.sep}{os.path.sep}{parsed.netloc}{os.path.sep}"
         path = os.path.normpath(os.path.join(host, url2pathname(unquote(parsed.path))))
@@ -290,7 +295,7 @@ class PlatformUtils:
             raise LanguageServerException(f"Unknown platform: {system=}, {machine=}, {bitness=}")
 
     @staticmethod
-    def _determine_windows_machine_type():
+    def _determine_windows_machine_type() -> str:
         import ctypes
         from ctypes import wintypes
 
@@ -317,7 +322,7 @@ class PlatformUtils:
             _anonymous_ = ("u",)
 
         sys_info = SYSTEM_INFO()
-        ctypes.windll.kernel32.GetNativeSystemInfo(ctypes.byref(sys_info))
+        ctypes.windll.kernel32.GetNativeSystemInfo(ctypes.byref(sys_info))  # type: ignore
 
         arch_map = {
             9: "AMD64",

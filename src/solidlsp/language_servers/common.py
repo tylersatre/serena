@@ -94,6 +94,9 @@ class RuntimeDependencyCollection:
 
     @staticmethod
     def _install_from_url(dep: RuntimeDependency, logger: LanguageServerLogger, target_dir: str) -> None:
+        if not dep.url:
+            raise ValueError(f"Dependency {dep.id} has no URL")
+
         if dep.archive_type == "gz" and dep.binary_name:
             dest = os.path.join(target_dir, dep.binary_name)
             FileUtils.download_and_extract_archive(logger, dep.url, dest, dep.archive_type)

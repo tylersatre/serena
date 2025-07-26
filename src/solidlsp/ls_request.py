@@ -1,10 +1,11 @@
-from typing import Union
+from collections.abc import Callable
+from typing import Any, Union
 
 from solidlsp.lsp_protocol_handler import lsp_types
 
 
 class LanguageServerRequest:
-    def __init__(self, send_request):
+    def __init__(self, send_request: Callable[[str, Any], Any]) -> None:
         self.send_request = send_request
 
     def implementation(self, params: lsp_types.ImplementationParams) -> Union["lsp_types.Definition", list["lsp_types.LocationLink"], None]:
@@ -218,7 +219,7 @@ class LanguageServerRequest:
         server. The only notification that is sent after a shutdown request
         is the exit event.
         """
-        return self.send_request("shutdown")
+        return self.send_request("shutdown", None)
 
     def will_save_wait_until(self, params: lsp_types.WillSaveTextDocumentParams) -> list["lsp_types.TextEdit"] | None:
         """A document will save request is sent from the client to the server before
