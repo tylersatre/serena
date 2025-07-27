@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from serena.agent import SerenaAgent
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
-from serena.config.serena_config import ProjectConfig, SerenaConfig
+from serena.config.serena_config import ProjectConfig, SerenaConfig, SerenaPaths
 from serena.constants import (
     DEFAULT_CONTEXT,
     DEFAULT_MODES,
@@ -25,6 +25,7 @@ from serena.constants import (
 )
 from serena.mcp import SerenaMCPFactorySingleProcess
 from serena.project import Project
+from serena.tools import ToolRegistry
 from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import Language
 
@@ -141,15 +142,22 @@ class TopLevelCommands(AutoRegisteringGroup):
         # initialize logging, using INFO level initially (will later be adjusted by SerenaAgent according to the config)
         #   * memory log handler (for use by GUI/Dashboard)
         #   * stream handler for stderr (for direct console output, which will also be captured by clients like Claude Desktop)
+        #   * file handler
         # (Note that stdout must never be used for logging, as it is used by the MCP server to communicate with the client.)
         Logger.root.setLevel(logging.INFO)
+        formatter = logging.Formatter(SERENA_LOG_FORMAT)
         memory_log_handler = MemoryLogHandler()
         Logger.root.addHandler(memory_log_handler)
         stderr_handler = logging.StreamHandler(stream=sys.stderr)
-        stderr_handler.formatter = logging.Formatter(SERENA_LOG_FORMAT)
+        stderr_handler.formatter = formatter
         Logger.root.addHandler(stderr_handler)
+        log_path = SerenaPaths().get_next_log_file_path("mcp")
+        file_handler = logging.FileHandler(log_path, mode="w")
+        file_handler.formatter = formatter
+        Logger.root.addHandler(file_handler)
 
         log.info("Initializing Serena MCP server")
+        log.info("Storing logs in %s", log_path)
         project_file = project_file_arg or project
         factory = SerenaMCPFactorySingleProcess(context=context, project=project_file, memory_log_handler=memory_log_handler)
         server = factory.create_mcp_server(
@@ -237,6 +245,7 @@ class ModeCommands(AutoRegisteringGroup):
     @click.command("create", help="Create a new mode or copy an internal one.")
     @click.option(
         "--name",
+        "-n",
         type=str,
         default=None,
         help="Name for the new mode. If --from-internal is passed may be left empty to create a mode of the same name, which will then override the internal mode.",
@@ -258,7 +267,7 @@ class ModeCommands(AutoRegisteringGroup):
             )
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         shutil.copyfile(src, dest)
-        click.echo(f"Created mode '{mode_name}' at {dest}.")
+        click.echo(f"Created mode '{mode_name}' at {dest}")
         _open_in_editor(dest)
 
     @staticmethod
@@ -313,6 +322,7 @@ class ContextCommands(AutoRegisteringGroup):
     @click.command("create", help="Create a new context or copy an internal one.")
     @click.option(
         "--name",
+        "-n",
         type=str,
         default=None,
         help="Name for the new context. If --from-internal is passed may be left empty to create a context of the same name, which will then override the internal context",
@@ -334,7 +344,7 @@ class ContextCommands(AutoRegisteringGroup):
             )
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         shutil.copyfile(src, dest)
-        click.echo(f"Created context '{ctx_name}' at {dest}.")
+        click.echo(f"Created context '{ctx_name}' at {dest}")
         _open_in_editor(dest)
 
     @staticmethod
@@ -445,11 +455,33 @@ class ProjectCommands(AutoRegisteringGroup):
         print(f"Symbols saved to {ls.cache_path}")
 
 
+class ToolCommands(AutoRegisteringGroup):
+    """Group for 'tool' subcommands."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            name="tools",
+            help="Commands related to Serena's tools. You can run `serena tools <command> --help` for more info on each command.",
+        )
+
+    @staticmethod
+    @click.command("list", help="Prints an overview of all tools implemented in Serena (not just the active ones for your project).")
+    @click.option("--quiet", "-q", is_flag=True)
+    def list(quiet: bool = False) -> None:
+        tool_registry = ToolRegistry()
+        if quiet:
+            for tool_name in tool_registry.get_tool_names_default_enabled():
+                click.echo(tool_name)
+        else:
+            ToolRegistry().print_tool_overview()
+
+
 # Expose groups so we can reference them in pyproject.toml
 mode = ModeCommands()
 context = ContextCommands()
 project = ProjectCommands()
 config = SerenaConfigCommands()
+tools = ToolCommands()
 
 # Expose toplevel commands for the same reason
 top_level = TopLevelCommands()
@@ -457,7 +489,7 @@ start_mcp_server = top_level.start_mcp_server
 index_project = project.index_deprecated
 
 # needed for the help script to work - register all subcommands to the top-level group
-for subgroup in (mode, context, project, config):
+for subgroup in (mode, context, project, config, tools):
     top_level.add_command(subgroup)
 
 
