@@ -1,6 +1,4 @@
 from typing import TYPE_CHECKING, Any, Union
-from collections.abc import Callable
-from typing import Any, Union
 
 from solidlsp.lsp_protocol_handler import lsp_types
 
