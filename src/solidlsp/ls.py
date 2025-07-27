@@ -14,7 +14,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from copy import copy
 from pathlib import Path, PurePath
-from typing import Any, Self, Union, cast
+from typing import Self, Union, cast
 
 import pathspec
 
@@ -309,7 +309,6 @@ class SolidLanguageServer(ABC):
         # Create a pathspec matcher from the processed patterns
         self._ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, processed_patterns)
 
-        self._server_context = None
         self._request_timeout: float | None = None
 
     def set_request_timeout(self, timeout: float | None) -> None:
@@ -431,9 +430,9 @@ class SolidLanguageServer(ABC):
         yield self
         self.stop()
 
-    def _start_server_process(self) -> Any | None:
+    def _start_server_process(self) -> None:
         self.server_started = True
-        return self._start_server()
+        self._start_server()
 
     @abstractmethod
     def _start_server(self) -> None:
@@ -1684,7 +1683,7 @@ class SolidLanguageServer(ABC):
             f"Starting language server with language {self.language_server.language} for {self.language_server.repository_root_path}",
             logging.INFO,
         )
-        self._server_context = self._start_server_process()
+        self._start_server_process()
         return self
 
     def stop(self, shutdown_timeout: float = 2.0) -> None:
