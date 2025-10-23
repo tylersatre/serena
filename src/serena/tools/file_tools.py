@@ -14,7 +14,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 
 from serena.text_utils import search_files
-from serena.tools import SUCCESS_RESULT, TOOL_DEFAULT_MAX_ANSWER_LENGTH, EditedFileContext, Tool, ToolMarkerCanEdit
+from serena.tools import SUCCESS_RESULT, EditedFileContext, Tool, ToolMarkerCanEdit, ToolMarkerOptional
 from serena.util.file_system import scan_directory
 
 
@@ -23,13 +23,10 @@ class ReadFileTool(Tool):
     Reads a file within the project directory.
     """
 
-    def apply(
-        self, relative_path: str, start_line: int = 0, end_line: int | None = None, max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH
-    ) -> str:
+    def apply(self, relative_path: str, start_line: int = 0, end_line: int | None = None, max_answer_chars: int = -1) -> str:
         """
         Reads the given file or a chunk of it. Generally, symbolic operations
         like find_symbol or find_referencing_symbols should be preferred if you know which symbols you are looking for.
-        Reading the entire file is only recommended if there is no other way to get the content required for the task.
 
         :param relative_path: the relative path to the file to read
         :param start_line: the 0-based index of the first line to be retrieved.
@@ -39,14 +36,13 @@ class ReadFileTool(Tool):
             required for the task.
         :return: the full text of the file at the given relative path
         """
-        self.project.validate_relative_path(relative_path)
+        self.project.validate_relative_path(relative_path, require_not_ignored=True)
 
         result = self.project.read_file(relative_path)
         result_lines = result.splitlines()
         if end_line is None:
             result_lines = result_lines[start_line:]
         else:
-            self.lines_read.add_lines_read(relative_path, (start_line, end_line))
             result_lines = result_lines[start_line : end_line + 1]
         result = "\n".join(result_lines)
 
@@ -60,30 +56,29 @@ class CreateTextFileTool(Tool, ToolMarkerCanEdit):
 
     def apply(self, relative_path: str, content: str) -> str:
         """
-        Write a new file (or overwrite an existing file). For existing files, it is strongly recommended
-        to use symbolic operations like replace_symbol_body or insert_after_symbol/insert_before_symbol, if possible.
-        You can also use insert_at_line to insert content at a specific line for existing files if the symbolic operations
-        are not the right choice for what you want to do.
-
-        If ever used on an existing file, the content has to be the complete content of that file (so it
-        may never end with something like "The remaining content of the file is left unchanged.").
-        For operations that just replace a part of a file, use the replace_lines or the symbolic editing tools instead.
+        Write a new file or overwrite an existing file.
 
         :param relative_path: the relative path to the file to create
-        :param content: the (utf-8-encoded) content to write to the file
+        :param content: the (appropriately encoded) content to write to the file
         :return: a message indicating success or failure
         """
-        self.project.validate_relative_path(relative_path)
-
-        abs_path = (Path(self.get_project_root()) / relative_path).resolve()
+        project_root = self.get_project_root()
+        abs_path = (Path(project_root) / relative_path).resolve()
         will_overwrite_existing = abs_path.exists()
 
+        if will_overwrite_existing:
+            self.project.validate_relative_path(relative_path, require_not_ignored=True)
+        else:
+            assert abs_path.is_relative_to(
+                self.get_project_root()
+            ), f"Cannot create file outside of the project directory, got {relative_path=}"
+
         abs_path.parent.mkdir(parents=True, exist_ok=True)
-        abs_path.write_text(content, encoding="utf-8")
+        abs_path.write_text(content, encoding=self.project.project_config.encoding)
         answer = f"File created: {relative_path}."
         if will_overwrite_existing:
             answer += " Overwrote existing file."
-        return answer
+        return json.dumps(answer)
 
 
 class ListDirTool(Tool):
@@ -91,25 +86,35 @@ class ListDirTool(Tool):
     Lists files and directories in the given directory (optionally with recursion).
     """
 
-    def apply(self, relative_path: str, recursive: bool, max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH) -> str:
+    def apply(self, relative_path: str, recursive: bool, skip_ignored_files: bool = False, max_answer_chars: int = -1) -> str:
         """
-        Lists all non-gitignored files and directories in the given directory (optionally with recursion).
+        Lists files and directories in the given directory (optionally with recursion).
 
         :param relative_path: the relative path to the directory to list; pass "." to scan the project root
         :param recursive: whether to scan subdirectories recursively
+        :param skip_ignored_files: whether to skip files and directories that are ignored
         :param max_answer_chars: if the output is longer than this number of characters,
-            no content will be returned. Don't adjust unless there is really no other way to get the content
-            required for the task.
+            no content will be returned. -1 means the default value from the config will be used.
+            Don't adjust unless there is really no other way to get the content required for the task.
         :return: a JSON object with the names of directories and files within the given directory
         """
-        self.project.validate_relative_path(relative_path)
+        # Check if the directory exists before validation
+        if not self.project.relative_path_exists(relative_path):
+            error_info = {
+                "error": f"Directory not found: {relative_path}",
+                "project_root": self.get_project_root(),
+                "hint": "Check if the path is correct relative to the project root",
+            }
+            return json.dumps(error_info)
+
+        self.project.validate_relative_path(relative_path, require_not_ignored=skip_ignored_files)
 
         dirs, files = scan_directory(
             os.path.join(self.get_project_root(), relative_path),
             relative_to=self.get_project_root(),
             recursive=recursive,
-            is_ignored_dir=self.project.is_ignored_path,
-            is_ignored_file=self.project.is_ignored_path,
+            is_ignored_dir=self.project.is_ignored_path if skip_ignored_files else None,
+            is_ignored_file=self.project.is_ignored_path if skip_ignored_files else None,
         )
 
         result = json.dumps({"dirs": dirs, "files": files})
@@ -129,7 +134,7 @@ class FindFileTool(Tool):
         :param relative_path: the relative path to the directory to search in; pass "." to scan the project root
         :return: a JSON object with the list of matching files
         """
-        self.project.validate_relative_path(relative_path)
+        self.project.validate_relative_path(relative_path, require_not_ignored=True)
 
         dir_to_scan = os.path.join(self.get_project_root(), relative_path)
 
@@ -140,7 +145,7 @@ class FindFileTool(Tool):
             filename = os.path.basename(abs_path)
             return not fnmatch(filename, file_mask)
 
-        dirs, files = scan_directory(
+        _dirs, files = scan_directory(
             path=dir_to_scan,
             recursive=True,
             is_ignored_dir=self.project.is_ignored_path,
@@ -173,19 +178,21 @@ class ReplaceRegexTool(Tool, ToolMarkerCanEdit):
         Always try to use wildcards to avoid specifying the exact content of the code to be replaced,
         especially if it spans several lines.
 
-        IMPORTANT: REMEMBER TO USE WILDCARDS WHEN APPROPRIATE! I WILL BE VERY UNHAPPY IF YOU WRITE LONG REGEXES WITHOUT USING WILDCARDS INSTEAD!
+        IMPORTANT: REMEMBER TO USE WILDCARDS WHEN APPROPRIATE! I WILL BE VERY UNHAPPY IF YOU WRITE UNNECESSARILY LONG REGEXES WITHOUT USING WILDCARDS!
 
         :param relative_path: the relative path to the file
         :param regex: a Python-style regular expression, matches of which will be replaced.
             Dot matches all characters, multi-line matching is enabled.
         :param repl: the string to replace the matched content with, which may contain
             backreferences like \1, \2, etc.
+            IMPORTANT: Make sure to escape special characters appropriately!
+                Use "\n" to insert a newline, but use "\\n" to insert the string "\n" within a string literal.
         :param allow_multiple_occurrences: if True, the regex may match multiple occurrences in the file
             and all of them will be replaced.
             If this is set to False and the regex matches multiple occurrences, an error will be returned
             (and you may retry with a revised, more specific regex).
         """
-        self.project.validate_relative_path(relative_path)
+        self.project.validate_relative_path(relative_path, require_not_ignored=True)
         with EditedFileContext(relative_path, self.agent) as context:
             original_content = context.get_original_content()
             updated_content, n = re.subn(regex, repl, original_content, flags=re.DOTALL | re.MULTILINE)
@@ -200,7 +207,7 @@ class ReplaceRegexTool(Tool, ToolMarkerCanEdit):
         return SUCCESS_RESULT
 
 
-class DeleteLinesTool(Tool, ToolMarkerCanEdit):
+class DeleteLinesTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
     """
     Deletes a range of lines within a file.
     """
@@ -220,15 +227,12 @@ class DeleteLinesTool(Tool, ToolMarkerCanEdit):
         :param start_line: the 0-based index of the first line to be deleted
         :param end_line: the 0-based index of the last line to be deleted
         """
-        if not self.lines_read.were_lines_read(relative_path, (start_line, end_line)):
-            read_lines_tool = self.agent.get_tool(ReadFileTool)
-            return f"Error: Must call `{read_lines_tool.get_name_from_cls()}` first to read exactly the affected lines."
         code_editor = self.create_code_editor()
         code_editor.delete_lines(relative_path, start_line, end_line)
         return SUCCESS_RESULT
 
 
-class ReplaceLinesTool(Tool, ToolMarkerCanEdit):
+class ReplaceLinesTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
     """
     Replaces a range of lines within a file with new content.
     """
@@ -259,7 +263,7 @@ class ReplaceLinesTool(Tool, ToolMarkerCanEdit):
         return SUCCESS_RESULT
 
 
-class InsertAtLineTool(Tool, ToolMarkerCanEdit):
+class InsertAtLineTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
     """
     Inserts content at a given line in a file.
     """
@@ -297,11 +301,11 @@ class SearchForPatternTool(Tool):
         substring_pattern: str,
         context_lines_before: int = 0,
         context_lines_after: int = 0,
-        paths_include_glob: str | None = None,
-        paths_exclude_glob: str | None = None,
+        paths_include_glob: str = "",
+        paths_exclude_glob: str = "",
         relative_path: str = "",
         restrict_search_to_code_files: bool = False,
-        max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH,
+        max_answer_chars: int = -1,
     ) -> str:
         """
         Offers a flexible search for arbitrary patterns in the codebase, including the
@@ -335,14 +339,18 @@ class SearchForPatternTool(Tool):
         :param context_lines_after: Number of lines of context to include after each match
         :param paths_include_glob: optional glob pattern specifying files to include in the search.
             Matches against relative file paths from the project root (e.g., "*.py", "src/**/*.ts").
-            Only matches files, not directories.
+            Supports standard glob patterns (*, ?, [seq], **, etc.) and brace expansion {a,b,c}.
+            Only matches files, not directories. If left empty, all non-ignored files will be included.
         :param paths_exclude_glob: optional glob pattern specifying files to exclude from the search.
             Matches against relative file paths from the project root (e.g., "*test*", "**/*_generated.py").
-            Takes precedence over paths_include_glob. Only matches files, not directories.
+            Supports standard glob patterns (*, ?, [seq], **, etc.) and brace expansion {a,b,c}.
+            Takes precedence over paths_include_glob. Only matches files, not directories. If left empty, no files are excluded.
         :param relative_path: only subpaths of this path (relative to the repo root) will be analyzed. If a path to a single
             file is passed, only that will be searched. The path must exist, otherwise a `FileNotFoundError` is raised.
         :param max_answer_chars: if the output is longer than this number of characters,
-            no content will be returned. Don't adjust unless there is really no other way to get the content
+            no content will be returned.
+            -1 means the default value from the config will be used.
+            Don't adjust unless there is really no other way to get the content
             required for the task. Instead, if the output is too long, you should
             make a stricter query.
         :param restrict_search_to_code_files: whether to restrict the search to only those files where
@@ -351,7 +359,7 @@ class SearchForPatternTool(Tool):
             For example, for finding classes or methods from a name pattern.
             Setting to False is a better choice if you also want to search in non-code files, like in html or yaml files,
             which is why it is the default.
-        :return: A JSON object mapping file paths to lists of matched consecutive lines (with context, if requested).
+        :return: A mapping of file paths to lists of matched consecutive lines.
         """
         abs_path = os.path.join(self.get_project_root(), relative_path)
         if not os.path.exists(abs_path):
@@ -363,14 +371,14 @@ class SearchForPatternTool(Tool):
                 relative_path=relative_path,
                 context_lines_before=context_lines_before,
                 context_lines_after=context_lines_after,
-                paths_include_glob=paths_include_glob,
-                paths_exclude_glob=paths_exclude_glob,
+                paths_include_glob=paths_include_glob.strip(),
+                paths_exclude_glob=paths_exclude_glob.strip(),
             )
         else:
             if os.path.isfile(abs_path):
                 rel_paths_to_search = [relative_path]
             else:
-                dirs, rel_paths_to_search = scan_directory(
+                _dirs, rel_paths_to_search = scan_directory(
                     path=abs_path,
                     recursive=True,
                     is_ignored_dir=self.project.is_ignored_path,
@@ -382,6 +390,7 @@ class SearchForPatternTool(Tool):
             matches = search_files(
                 rel_paths_to_search,
                 substring_pattern,
+                file_reader=self.project.read_file,
                 root_path=self.get_project_root(),
                 paths_include_glob=paths_include_glob,
                 paths_exclude_glob=paths_exclude_glob,

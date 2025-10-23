@@ -1,3 +1,5 @@
+import glob
+import json
 import os
 import shutil
 import subprocess
@@ -8,6 +10,7 @@ from typing import Any, Literal
 
 import click
 from sensai.util import logging
+from sensai.util.logging import FileLoggerContext, datetime_tag
 from tqdm import tqdm
 
 from serena.agent import SerenaAgent
@@ -16,6 +19,8 @@ from serena.config.serena_config import ProjectConfig, SerenaConfig, SerenaPaths
 from serena.constants import (
     DEFAULT_CONTEXT,
     DEFAULT_MODES,
+    PROMPT_TEMPLATES_DIR_IN_USER_HOME,
+    PROMPT_TEMPLATES_DIR_INTERNAL,
     SERENA_LOG_FORMAT,
     SERENA_MANAGED_DIR_IN_HOME,
     SERENAS_OWN_CONTEXT_YAMLS_DIR,
@@ -23,11 +28,12 @@ from serena.constants import (
     USER_CONTEXT_YAMLS_DIR,
     USER_MODE_YAMLS_DIR,
 )
-from serena.mcp import SerenaMCPFactorySingleProcess
+from serena.mcp import SerenaMCPFactory, SerenaMCPFactorySingleProcess
 from serena.project import Project
-from serena.tools import ToolRegistry
+from serena.tools import FindReferencingSymbolsTool, FindSymbolTool, GetSymbolsOverviewTool, SearchForPatternTool, ToolRegistry
 from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import Language
+from solidlsp.util.subprocess_util import subprocess_kwargs
 
 log = logging.getLogger(__name__)
 
@@ -37,18 +43,19 @@ log = logging.getLogger(__name__)
 def _open_in_editor(path: str) -> None:
     """Open the given file in the system's default editor or viewer."""
     editor = os.environ.get("EDITOR")
+    run_kwargs = subprocess_kwargs()
     try:
         if editor:
-            subprocess.run([editor, path], check=False)
+            subprocess.run([editor, path], check=False, **run_kwargs)
         elif sys.platform.startswith("win"):
             try:
                 os.startfile(path)
             except OSError:
-                subprocess.run(["notepad.exe", path], check=False)
+                subprocess.run(["notepad.exe", path], check=False, **run_kwargs)
         elif sys.platform == "darwin":
-            subprocess.run(["open", path], check=False)
+            subprocess.run(["open", path], check=False, **run_kwargs)
         else:
-            subprocess.run(["xdg-open", path], check=False)
+            subprocess.run(["xdg-open", path], check=False, **run_kwargs)
     except Exception as e:
         print(f"Failed to open {path}: {e}")
 
@@ -112,7 +119,13 @@ class TopLevelCommands(AutoRegisteringGroup):
         show_default=True,
         help="Built-in mode names or paths to custom mode YAMLs.",
     )
-    @click.option("--transport", type=click.Choice(["stdio", "sse"]), default="stdio", show_default=True, help="Transport protocol.")
+    @click.option(
+        "--transport",
+        type=click.Choice(["stdio", "sse", "streamable-http"]),
+        default="stdio",
+        show_default=True,
+        help="Transport protocol.",
+    )
     @click.option("--host", type=str, default="0.0.0.0", show_default=True)
     @click.option("--port", type=int, default=8000, show_default=True)
     @click.option("--enable-web-dashboard", type=bool, is_flag=False, default=None, help="Override dashboard setting in config.")
@@ -130,7 +143,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         project_file_arg: str | None,
         context: str,
         modes: tuple[str, ...],
-        transport: Literal["stdio", "sse"],
+        transport: Literal["stdio", "sse", "streamable-http"],
         host: str,
         port: int,
         enable_web_dashboard: bool | None,
@@ -427,32 +440,240 @@ class ProjectCommands(AutoRegisteringGroup):
         default="WARNING",
         help="Log level for indexing.",
     )
-    def index(project: str, log_level: str = "WARNING") -> None:
-        ProjectCommands._index_project(project, log_level)
+    @click.option("--timeout", type=float, default=10, help="Timeout for indexing a single file.")
+    def index(project: str, log_level: str, timeout: float) -> None:
+        ProjectCommands._index_project(project, log_level, timeout=timeout)
 
     @staticmethod
     @click.command("index-deprecated", help="Deprecated alias for 'serena project index'.")
     @click.argument("project", type=click.Path(exists=True), default=os.getcwd(), required=False)
     @click.option("--log-level", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]), default="WARNING")
-    def index_deprecated(project: str, log_level: str = "WARNING") -> None:
-        click.echo("Deprecated! Use `project index` instead.")
-        ProjectCommands._index_project(project, log_level)
+    @click.option("--timeout", type=float, default=10, help="Timeout for indexing a single file.")
+    def index_deprecated(project: str, log_level: str, timeout: float) -> None:
+        click.echo("Deprecated! Use `serena project index` instead.")
+        ProjectCommands._index_project(project, log_level, timeout=timeout)
 
     @staticmethod
-    def _index_project(project: str, log_level: str) -> None:
+    def _index_project(project: str, log_level: str, timeout: float) -> None:
         lvl = logging.getLevelNamesMapping()[log_level.upper()]
+        logging.configure(level=lvl)
+        serena_config = SerenaConfig.from_config_file()
         proj = Project.load(os.path.abspath(project))
-        print(f"Indexing symbols in project {project}…")
-        ls = proj.create_language_server(log_level=lvl)
+        click.echo(f"Indexing symbols in project {project}…")
+        ls = proj.create_language_server(log_level=lvl, ls_timeout=timeout, ls_specific_settings=serena_config.ls_specific_settings)
+        log_file = os.path.join(project, ".serena", "logs", "indexing.txt")
+
+        collected_exceptions: list[Exception] = []
+        files_failed = []
         with ls.start_server():
             files = proj.gather_source_files()
             for i, f in enumerate(tqdm(files, desc="Indexing")):
-                ls.request_document_symbols(f, include_body=False)
-                ls.request_document_symbols(f, include_body=True)
+                try:
+                    ls.request_document_symbols(f, include_body=False)
+                    ls.request_document_symbols(f, include_body=True)
+                except Exception as e:
+                    log.error(f"Failed to index {f}, continuing.")
+                    collected_exceptions.append(e)
+                    files_failed.append(f)
                 if (i + 1) % 10 == 0:
                     ls.save_cache()
             ls.save_cache()
-        print(f"Symbols saved to {ls.cache_path}")
+        click.echo(f"Symbols saved to {ls.cache_path}")
+        if len(files_failed) > 0:
+            os.makedirs(os.path.dirname(log_file), exist_ok=True)
+            with open(log_file, "w") as f:
+                for file, exception in zip(files_failed, collected_exceptions, strict=True):
+                    f.write(f"{file}\n")
+                    f.write(f"{exception}\n")
+            click.echo(f"Failed to index {len(files_failed)} files, see:\n{log_file}")
+
+    @staticmethod
+    @click.command("is_ignored_path", help="Check if a path is ignored by the project configuration.")
+    @click.argument("path", type=click.Path(exists=False, file_okay=True, dir_okay=True))
+    @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
+    def is_ignored_path(path: str, project: str) -> None:
+        """
+        Check if a given path is ignored by the project configuration.
+
+        :param path: The path to check.
+        :param project: The path to the project directory, defaults to the current working directory.
+        """
+        proj = Project.load(os.path.abspath(project))
+        if os.path.isabs(path):
+            path = os.path.relpath(path, start=proj.project_root)
+        is_ignored = proj.is_ignored_path(path)
+        click.echo(f"Path '{path}' IS {'ignored' if is_ignored else 'IS NOT ignored'} by the project configuration.")
+
+    @staticmethod
+    @click.command("index-file", help="Index a single file by saving its symbols to the LSP cache.")
+    @click.argument("file", type=click.Path(exists=True, file_okay=True, dir_okay=False))
+    @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
+    @click.option("--verbose", "-v", is_flag=True, help="Print detailed information about the indexed symbols.")
+    def index_file(file: str, project: str, verbose: bool) -> None:
+        """
+        Index a single file by saving its symbols to the LSP cache, useful for debugging.
+        :param file: path to the file to index, must be inside the project directory.
+        :param project: path to the project directory, defaults to the current working directory.
+        :param verbose: if set, prints detailed information about the indexed symbols.
+        """
+        proj = Project.load(os.path.abspath(project))
+        if os.path.isabs(file):
+            file = os.path.relpath(file, start=proj.project_root)
+        if proj.is_ignored_path(file, ignore_non_source_files=True):
+            click.echo(f"'{file}' is ignored or declared as non-code file by the project configuration, won't index.")
+            exit(1)
+        ls = proj.create_language_server()
+        with ls.start_server():
+            symbols, _ = ls.request_document_symbols(file, include_body=False)
+            ls.request_document_symbols(file, include_body=True)
+            if verbose:
+                click.echo(f"Symbols in file '{file}':")
+                for symbol in symbols:
+                    click.echo(f"  - {symbol['name']} at line {symbol['selectionRange']['start']['line']} of kind {symbol['kind']}")
+            ls.save_cache()
+            click.echo(f"Successfully indexed file '{file}', {len(symbols)} symbols saved to {ls.cache_path}.")
+
+    @staticmethod
+    @click.command("health-check", help="Perform a comprehensive health check of the project's tools and language server.")
+    @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
+    def health_check(project: str) -> None:
+        """
+        Perform a comprehensive health check of the project's tools and language server.
+
+        :param project: path to the project directory, defaults to the current working directory.
+        """
+        # NOTE: completely written by Claude Code, only functionality was reviewed, not implementation
+        logging.configure(level=logging.INFO)
+        project_path = os.path.abspath(project)
+        proj = Project.load(project_path)
+
+        # Create log file with timestamp
+        timestamp = datetime_tag()
+        log_dir = os.path.join(project_path, ".serena", "logs", "health-checks")
+        os.makedirs(log_dir, exist_ok=True)
+        log_file = os.path.join(log_dir, f"health_check_{timestamp}.log")
+
+        with FileLoggerContext(log_file, append=False, enabled=True):
+            log.info("Starting health check for project: %s", project_path)
+
+            try:
+                # Create SerenaAgent with dashboard disabled
+                log.info("Creating SerenaAgent with disabled dashboard...")
+                config = SerenaConfig(gui_log_window_enabled=False, web_dashboard=False)
+                agent = SerenaAgent(project=project_path, serena_config=config)
+                log.info("SerenaAgent created successfully")
+
+                # Find first non-empty file that can be analyzed
+                log.info("Searching for analyzable files...")
+                files = proj.gather_source_files()
+                target_file = None
+
+                for file_path in files:
+                    try:
+                        full_path = os.path.join(project_path, file_path)
+                        if os.path.getsize(full_path) > 0:
+                            target_file = file_path
+                            log.info("Found analyzable file: %s", target_file)
+                            break
+                    except (OSError, FileNotFoundError):
+                        continue
+
+                if not target_file:
+                    log.error("No analyzable files found in project")
+                    click.echo("❌ Health check failed: No analyzable files found")
+                    click.echo(f"Log saved to: {log_file}")
+                    return
+
+                # Get tools from agent
+                overview_tool = agent.get_tool(GetSymbolsOverviewTool)
+                find_symbol_tool = agent.get_tool(FindSymbolTool)
+                find_refs_tool = agent.get_tool(FindReferencingSymbolsTool)
+                search_pattern_tool = agent.get_tool(SearchForPatternTool)
+
+                # Test 1: Get symbols overview
+                log.info("Testing GetSymbolsOverviewTool on file: %s", target_file)
+                overview_result = agent.execute_task(lambda: overview_tool.apply(target_file))
+                overview_data = json.loads(overview_result)
+                log.info("GetSymbolsOverviewTool returned %d symbols", len(overview_data))
+
+                if not overview_data:
+                    log.error("No symbols found in file %s", target_file)
+                    click.echo("❌ Health check failed: No symbols found in target file")
+                    click.echo(f"Log saved to: {log_file}")
+                    return
+
+                # Extract suitable symbol (prefer class or function over variables)
+                # LSP symbol kinds: 5=class, 12=function, 6=method, 9=constructor
+                preferred_kinds = [5, 12, 6, 9]  # class, function, method, constructor
+
+                selected_symbol = None
+                for symbol in overview_data:
+                    if symbol.get("kind") in preferred_kinds:
+                        selected_symbol = symbol
+                        break
+
+                # If no preferred symbol found, use first available
+                if not selected_symbol:
+                    selected_symbol = overview_data[0]
+                    log.info("No class or function found, using first available symbol")
+
+                symbol_name = selected_symbol.get("name_path", "unknown")
+                symbol_kind = selected_symbol.get("kind", "unknown")
+                log.info("Using symbol for testing: %s (kind: %d)", symbol_name, symbol_kind)
+
+                # Test 2: FindSymbolTool
+                log.info("Testing FindSymbolTool for symbol: %s", symbol_name)
+                find_symbol_result = agent.execute_task(
+                    lambda: find_symbol_tool.apply(symbol_name, relative_path=target_file, include_body=True)
+                )
+                find_symbol_data = json.loads(find_symbol_result)
+                log.info("FindSymbolTool found %d matches for symbol %s", len(find_symbol_data), symbol_name)
+
+                # Test 3: FindReferencingSymbolsTool
+                log.info("Testing FindReferencingSymbolsTool for symbol: %s", symbol_name)
+                try:
+                    find_refs_result = agent.execute_task(lambda: find_refs_tool.apply(symbol_name, relative_path=target_file))
+                    find_refs_data = json.loads(find_refs_result)
+                    log.info("FindReferencingSymbolsTool found %d references for symbol %s", len(find_refs_data), symbol_name)
+                except Exception as e:
+                    log.warning("FindReferencingSymbolsTool failed for symbol %s: %s", symbol_name, str(e))
+                    find_refs_data = []
+
+                # Test 4: SearchForPatternTool to verify references
+                log.info("Testing SearchForPatternTool for pattern: %s", symbol_name)
+                try:
+                    search_result = agent.execute_task(
+                        lambda: search_pattern_tool.apply(substring_pattern=symbol_name, restrict_search_to_code_files=True)
+                    )
+                    search_data = json.loads(search_result)
+                    pattern_matches = sum(len(matches) for matches in search_data.values())
+                    log.info("SearchForPatternTool found %d pattern matches for %s", pattern_matches, symbol_name)
+                except Exception as e:
+                    log.warning("SearchForPatternTool failed for pattern %s: %s", symbol_name, str(e))
+                    pattern_matches = 0
+
+                # Verify tools worked as expected
+                tools_working = True
+                if not find_symbol_data:
+                    log.error("FindSymbolTool returned no results")
+                    tools_working = False
+
+                if len(find_refs_data) == 0 and pattern_matches == 0:
+                    log.warning("Both FindReferencingSymbolsTool and SearchForPatternTool found no matches - this might indicate an issue")
+
+                log.info("Health check completed successfully")
+
+                if tools_working:
+                    click.echo("✅ Health check passed - All tools working correctly")
+                else:
+                    click.echo("⚠️  Health check completed with warnings - Check log for details")
+
+            except Exception as e:
+                log.exception("Health check failed with exception: %s", str(e))
+                click.echo(f"❌ Health check failed: {e!s}")
+
+            finally:
+                click.echo(f"Log saved to: {log_file}")
 
 
 class ToolCommands(AutoRegisteringGroup):
@@ -465,15 +686,133 @@ class ToolCommands(AutoRegisteringGroup):
         )
 
     @staticmethod
-    @click.command("list", help="Prints an overview of all tools implemented in Serena (not just the active ones for your project).")
+    @click.command(
+        "list",
+        help="Prints an overview of the tools that are active by default (not just the active ones for your project). For viewing all tools, pass `--all / -a`",
+    )
     @click.option("--quiet", "-q", is_flag=True)
-    def list(quiet: bool = False) -> None:
+    @click.option("--all", "-a", "include_optional", is_flag=True, help="List all tools, including those not enabled by default.")
+    @click.option("--only-optional", is_flag=True, help="List only optional tools (those not enabled by default).")
+    def list(quiet: bool = False, include_optional: bool = False, only_optional: bool = False) -> None:
         tool_registry = ToolRegistry()
         if quiet:
-            for tool_name in tool_registry.get_tool_names_default_enabled():
+            if only_optional:
+                tool_names = tool_registry.get_tool_names_optional()
+            elif include_optional:
+                tool_names = tool_registry.get_tool_names()
+            else:
+                tool_names = tool_registry.get_tool_names_default_enabled()
+            for tool_name in tool_names:
                 click.echo(tool_name)
         else:
-            ToolRegistry().print_tool_overview()
+            ToolRegistry().print_tool_overview(include_optional=include_optional, only_optional=only_optional)
+
+    @staticmethod
+    @click.command(
+        "description",
+        help="Print the description of a tool, optionally with a specific context (the latter may modify the default description).",
+    )
+    @click.argument("tool_name", type=str)
+    @click.option("--context", type=str, default=None, help="Context name or path to context file.")
+    def description(tool_name: str, context: str | None = None) -> None:
+        # Load the context
+        serena_context = None
+        if context:
+            serena_context = SerenaAgentContext.load(context)
+
+        agent = SerenaAgent(
+            project=None,
+            serena_config=SerenaConfig(web_dashboard=False, log_level=logging.INFO),
+            context=serena_context,
+        )
+        tool = agent.get_tool_by_name(tool_name)
+        mcp_tool = SerenaMCPFactory.make_mcp_tool(tool)
+        click.echo(mcp_tool.description)
+
+
+class PromptCommands(AutoRegisteringGroup):
+    def __init__(self) -> None:
+        super().__init__(name="prompts", help="Commands related to Serena's prompts that are outside of contexts and modes.")
+
+    @staticmethod
+    def _get_user_prompt_yaml_path(prompt_yaml_name: str) -> str:
+        os.makedirs(PROMPT_TEMPLATES_DIR_IN_USER_HOME, exist_ok=True)
+        return os.path.join(PROMPT_TEMPLATES_DIR_IN_USER_HOME, prompt_yaml_name)
+
+    @staticmethod
+    @click.command("list", help="Lists yamls that are used for defining prompts.")
+    def list() -> None:
+        serena_prompt_yaml_names = [os.path.basename(f) for f in glob.glob(PROMPT_TEMPLATES_DIR_INTERNAL + "/*.yml")]
+        for prompt_yaml_name in serena_prompt_yaml_names:
+            user_prompt_yaml_path = PromptCommands._get_user_prompt_yaml_path(prompt_yaml_name)
+            if os.path.exists(user_prompt_yaml_path):
+                click.echo(f"{user_prompt_yaml_path} merged with default prompts in {prompt_yaml_name}")
+            else:
+                click.echo(prompt_yaml_name)
+
+    @staticmethod
+    @click.command("create-override", help="Create an override of an internal prompts yaml for customizing Serena's prompts")
+    @click.argument("prompt_yaml_name")
+    def create_override(prompt_yaml_name: str) -> None:
+        """
+        :param prompt_yaml_name: The yaml name of the prompt you want to override. Call the `list` command for discovering valid prompt yaml names.
+        :return:
+        """
+        # for convenience, we can pass names without .yml
+        if not prompt_yaml_name.endswith(".yml"):
+            prompt_yaml_name = prompt_yaml_name + ".yml"
+        user_prompt_yaml_path = PromptCommands._get_user_prompt_yaml_path(prompt_yaml_name)
+        if os.path.exists(user_prompt_yaml_path):
+            raise FileExistsError(f"{user_prompt_yaml_path} already exists.")
+        serena_prompt_yaml_path = os.path.join(PROMPT_TEMPLATES_DIR_INTERNAL, prompt_yaml_name)
+        shutil.copyfile(serena_prompt_yaml_path, user_prompt_yaml_path)
+        _open_in_editor(user_prompt_yaml_path)
+
+    @staticmethod
+    @click.command("edit-override", help="Edit an existing prompt override file")
+    @click.argument("prompt_yaml_name")
+    def edit_override(prompt_yaml_name: str) -> None:
+        """
+        :param prompt_yaml_name: The yaml name of the prompt override to edit.
+        :return:
+        """
+        # for convenience, we can pass names without .yml
+        if not prompt_yaml_name.endswith(".yml"):
+            prompt_yaml_name = prompt_yaml_name + ".yml"
+        user_prompt_yaml_path = PromptCommands._get_user_prompt_yaml_path(prompt_yaml_name)
+        if not os.path.exists(user_prompt_yaml_path):
+            click.echo(f"Override file '{prompt_yaml_name}' not found. Create it with: prompts create-override {prompt_yaml_name}")
+            return
+        _open_in_editor(user_prompt_yaml_path)
+
+    @staticmethod
+    @click.command("list-overrides", help="List existing prompt override files")
+    def list_overrides() -> None:
+        os.makedirs(PROMPT_TEMPLATES_DIR_IN_USER_HOME, exist_ok=True)
+        serena_prompt_yaml_names = [os.path.basename(f) for f in glob.glob(PROMPT_TEMPLATES_DIR_INTERNAL + "/*.yml")]
+        override_files = glob.glob(os.path.join(PROMPT_TEMPLATES_DIR_IN_USER_HOME, "*.yml"))
+        for file_path in override_files:
+            if os.path.basename(file_path) in serena_prompt_yaml_names:
+                click.echo(file_path)
+
+    @staticmethod
+    @click.command("delete-override", help="Delete a prompt override file")
+    @click.argument("prompt_yaml_name")
+    def delete_override(prompt_yaml_name: str) -> None:
+        """
+
+        :param prompt_yaml_name:  The yaml name of the prompt override to delete."
+        :return:
+        """
+        # for convenience, we can pass names without .yml
+        if not prompt_yaml_name.endswith(".yml"):
+            prompt_yaml_name = prompt_yaml_name + ".yml"
+        user_prompt_yaml_path = PromptCommands._get_user_prompt_yaml_path(prompt_yaml_name)
+        if not os.path.exists(user_prompt_yaml_path):
+            click.echo(f"Override file '{prompt_yaml_name}' not found.")
+            return
+        os.remove(user_prompt_yaml_path)
+        click.echo(f"Deleted override file '{prompt_yaml_name}'.")
 
 
 # Expose groups so we can reference them in pyproject.toml
@@ -482,6 +821,7 @@ context = ContextCommands()
 project = ProjectCommands()
 config = SerenaConfigCommands()
 tools = ToolCommands()
+prompts = PromptCommands()
 
 # Expose toplevel commands for the same reason
 top_level = TopLevelCommands()
@@ -489,7 +829,7 @@ start_mcp_server = top_level.start_mcp_server
 index_project = project.index_deprecated
 
 # needed for the help script to work - register all subcommands to the top-level group
-for subgroup in (mode, context, project, config, tools):
+for subgroup in (mode, context, project, config, tools, prompts):
     top_level.add_command(subgroup)
 
 

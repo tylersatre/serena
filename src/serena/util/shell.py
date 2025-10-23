@@ -1,8 +1,9 @@
 import os
-import platform
 import subprocess
 
 from pydantic import BaseModel
+
+from solidlsp.util.subprocess_util import subprocess_kwargs
 
 
 class ShellCommandResult(BaseModel):
@@ -24,18 +25,17 @@ def execute_shell_command(command: str, cwd: str | None = None, capture_stderr: 
     if cwd is None:
         cwd = os.getcwd()
 
-    is_windows = platform.system() == "Windows"
     process = subprocess.Popen(
         command,
-        shell=not is_windows,
+        shell=True,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE if capture_stderr else None,
-        creationflags=subprocess.CREATE_NO_WINDOW if is_windows else 0,  # type: ignore
         text=True,
         encoding="utf-8",
         errors="replace",
         cwd=cwd,
+        **subprocess_kwargs(),
     )
 
     stdout, stderr = process.communicate()
@@ -43,15 +43,7 @@ def execute_shell_command(command: str, cwd: str | None = None, capture_stderr: 
 
 
 def subprocess_check_output(args: list[str], encoding: str = "utf-8", strip: bool = True, timeout: float | None = None) -> str:
-    kwargs = {
-        "stdin": subprocess.DEVNULL,
-        "stderr": subprocess.PIPE,
-        "timeout": timeout,
-        "env": os.environ.copy(),
-    }
-    if platform.system() == "Windows":
-        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore
-    output = subprocess.check_output(args, **kwargs).decode(encoding)  # type: ignore
+    output = subprocess.check_output(args, stdin=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=timeout, env=os.environ.copy(), **subprocess_kwargs()).decode(encoding)  # type: ignore
     if strip:
         output = output.strip()
     return output

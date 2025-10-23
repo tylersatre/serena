@@ -10,7 +10,7 @@ from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata, func_metada
 from sensai.util import logging
 from sensai.util.string import dict_string
 
-from serena.project import Project
+from serena.project import MemoriesManager, Project
 from serena.prompt_factory import PromptFactory
 from serena.symbol import LanguageServerSymbolRetriever
 from serena.util.class_decorators import singleton
@@ -18,7 +18,7 @@ from serena.util.inspection import iter_subclasses
 from solidlsp.ls_exceptions import SolidLSPException
 
 if TYPE_CHECKING:
-    from serena.agent import LinesRead, MemoriesManager, SerenaAgent
+    from serena.agent import SerenaAgent
     from serena.code_editor import CodeEditor
 
 log = logging.getLogger(__name__)
@@ -42,8 +42,7 @@ class Component(ABC):
 
     @property
     def memories_manager(self) -> "MemoriesManager":
-        assert self.agent.memories_manager is not None
-        return self.agent.memories_manager
+        return self.project.memories_manager
 
     def create_language_server_symbol_retriever(self) -> LanguageServerSymbolRetriever:
         if not self.agent.is_using_language_server():
@@ -64,28 +63,38 @@ class Component(ABC):
         else:
             return JetBrainsCodeEditor(project=self.project, agent=self.agent)
 
-    @property
-    def lines_read(self) -> "LinesRead":
-        assert self.agent.lines_read is not None
-        return self.agent.lines_read
+
+class ToolMarker:
+    """
+    Base class for tool markers.
+    """
 
 
-TOOL_DEFAULT_MAX_ANSWER_LENGTH = int(2e5)
-
-
-class ToolMarkerCanEdit:
+class ToolMarkerCanEdit(ToolMarker):
     """
     Marker class for all tools that can perform editing operations on files.
     """
 
 
-class ToolMarkerDoesNotRequireActiveProject:
+class ToolMarkerDoesNotRequireActiveProject(ToolMarker):
     pass
 
 
-class ToolMarkerOptional:
+class ToolMarkerOptional(ToolMarker):
     """
     Marker class for optional tools that are disabled by default.
+    """
+
+
+class ToolMarkerSymbolicRead(ToolMarker):
+    """
+    Marker class for tools that perform symbol read operations.
+    """
+
+
+class ToolMarkerSymbolicEdit(ToolMarkerCanEdit):
+    """
+    Marker class for tools that perform symbolic edit operations.
     """
 
 
@@ -196,8 +205,11 @@ class Tool(Component):
                 params[param] = value
         log.info(f"{self.get_name_from_cls()}: {dict_string(params)}")
 
-    @staticmethod
-    def _limit_length(result: str, max_answer_chars: int) -> str:
+    def _limit_length(self, result: str, max_answer_chars: int) -> str:
+        if max_answer_chars == -1:
+            max_answer_chars = self.agent.serena_config.default_max_tool_answer_chars
+        if max_answer_chars <= 0:
+            raise ValueError(f"Must be positive or the default (-1), got: {max_answer_chars=}")
         if (n_chars := len(result)) > max_answer_chars:
             result = (
                 f"The answer is too long ({n_chars} characters). "
@@ -229,7 +241,7 @@ class Tool(Component):
                 if not isinstance(self, ToolMarkerDoesNotRequireActiveProject):
                     if self.agent._active_project is None:
                         return (
-                            "Error: No active project. Ask to user to select a project from this list: "
+                            "Error: No active project. Ask the user to provide the project path or to select a project from this list of known projects: "
                             + f"{self.agent.serena_config.project_names}"
                         )
                     if self.agent.is_using_language_server() and not self.agent.is_language_server_running():
@@ -345,18 +357,49 @@ class ToolRegistry:
     def get_all_tool_classes(self) -> list[type[Tool]]:
         return list(t.tool_class for t in self._tool_dict.values())
 
+    def get_tool_classes_default_enabled(self) -> list[type[Tool]]:
+        """
+        :return: the list of tool classes that are enabled by default (i.e. non-optional tools).
+        """
+        return [t.tool_class for t in self._tool_dict.values() if not t.is_optional]
+
+    def get_tool_classes_optional(self) -> list[type[Tool]]:
+        """
+        :return: the list of tool classes that are optional (i.e. disabled by default).
+        """
+        return [t.tool_class for t in self._tool_dict.values() if t.is_optional]
+
     def get_tool_names_default_enabled(self) -> list[str]:
         """
         :return: the list of tool names that are enabled by default (i.e. non-optional tools).
         """
         return [t.tool_name for t in self._tool_dict.values() if not t.is_optional]
 
-    def print_tool_overview(self, tools: Iterable[type[Tool] | Tool] | None = None) -> None:
+    def get_tool_names_optional(self) -> list[str]:
         """
-        Print a summary of the tools. If no tools are passed, a summary of all tools is printed.
+        :return: the list of tool names that are optional (i.e. disabled by default).
+        """
+        return [t.tool_name for t in self._tool_dict.values() if t.is_optional]
+
+    def get_tool_names(self) -> list[str]:
+        """
+        :return: the list of all tool names.
+        """
+        return list(self._tool_dict.keys())
+
+    def print_tool_overview(
+        self, tools: Iterable[type[Tool] | Tool] | None = None, include_optional: bool = False, only_optional: bool = False
+    ) -> None:
+        """
+        Print a summary of the tools. If no tools are passed, a summary of the selection of tools (all, default or only optional) is printed.
         """
         if tools is None:
-            tools = [tool.tool_class for tool in self._tool_dict.values() if not tool.is_optional]
+            if only_optional:
+                tools = self.get_tool_classes_optional()
+            elif include_optional:
+                tools = self.get_all_tool_classes()
+            else:
+                tools = self.get_tool_classes_default_enabled()
 
         tool_dict: dict[str, type[Tool] | Tool] = {}
         for tool_class in tools:

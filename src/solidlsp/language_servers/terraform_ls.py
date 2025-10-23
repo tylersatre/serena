@@ -1,7 +1,6 @@
 import logging
 import os
 import shutil
-import stat
 import threading
 from typing import cast
 
@@ -86,6 +85,14 @@ class TerraformLS(SolidLanguageServer):
                 ),
                 RuntimeDependency(
                     id="TerraformLS",
+                    description="terraform-ls for Linux (ARM64)",
+                    url="https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_linux_arm64.zip",
+                    platform_id="linux-arm64",
+                    archive_type="zip",
+                    binary_name="terraform-ls",
+                ),
+                RuntimeDependency(
+                    id="TerraformLS",
                     description="terraform-ls for Linux (x64)",
                     url="https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_linux_amd64.zip",
                     platform_id="linux-x64",
@@ -102,7 +109,7 @@ class TerraformLS(SolidLanguageServer):
                 ),
             ]
         )
-        dependency = deps.single_for_current_platform()
+        dependency = deps.get_single_dep_for_current_platform()
 
         terraform_ls_executable_path = deps.binary_path(cls.ls_resources_dir(solidlsp_settings))
         if not os.path.exists(terraform_ls_executable_path):
@@ -113,7 +120,7 @@ class TerraformLS(SolidLanguageServer):
 
         # Make the executable file executable on Unix-like systems
         if platform_id.value != "win-x64":
-            os.chmod(terraform_ls_executable_path, stat.S_IEXEC | stat.S_IREAD)
+            os.chmod(terraform_ls_executable_path, 0o755)
 
         return terraform_ls_executable_path
 

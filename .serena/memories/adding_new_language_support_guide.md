@@ -5,6 +5,7 @@ This guide explains how to add support for a new programming language to Serena.
 ## Overview
 
 Adding a new language involves:
+
 1. **Language Server Implementation** - Creating a language-specific server class
 2. **Language Registration** - Adding the language to enums and configurations  
 3. **Test Repository** - Creating a minimal test project
@@ -154,6 +155,7 @@ test/resources/repos/new_language/test_repo/
 ### 3.2 Example Source Files
 
 Create meaningful source files that demonstrate:
+
 - **Classes/Types** - For symbol testing
 - **Functions/Methods** - For reference finding
 - **Imports/Dependencies** - For cross-file operations
@@ -184,9 +186,22 @@ class Program {
 
 ## Step 4: Test Suite
 
+Testing the language server implementation is of crucial importance, and the tests will
+form the main part of the review process. Make sure that the tests are up to the standard
+of Serena to make the review go smoother.
+
+General rules for tests:
+
+1. Tests for symbols and references should always check that the expected symbol names and references were actually found.
+   Just testing that a list came back or that the result is not None is insufficient.
+2. Tests should never be skipped, the only exception is skipping based on some package being available or on an unsupported OS.
+3. Tests should run in CI, check if there is a suitable GitHub action for installing the dependencies.
+
 ### 4.1 Basic Tests
 
-Create `test/solidlsp/new_language/test_new_language_basic.py`. You should at least test:
+Create `test/solidlsp/new_language/test_new_language_basic.py`.
+Have a look at the structure of existing tests, for example, in `test/solidlsp/php/test_php_basic.py`
+You should at least test:
 
 1. Finding symbols
 2. Finding within-file references
@@ -203,6 +218,7 @@ Consider adding new cases to the parametrized tests in `test_serena_agent.py` fo
 ### 5 Documentation
 
 Update:
+
 - **README.md** - Add language to supported languages list
 - **CHANGELOG.md** - Document the new language support
 - **Language-specific docs** - Installation requirements, known issues

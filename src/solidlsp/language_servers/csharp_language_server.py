@@ -7,7 +7,6 @@ import logging
 import os
 import platform
 import shutil
-import stat
 import subprocess
 import tarfile
 import threading
@@ -27,11 +26,11 @@ from solidlsp.ls_utils import PathUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams, InitializeResult
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.zip import SafeZipExtractor
 
-from .common import RuntimeDependency
+from .common import RuntimeDependency, RuntimeDependencyCollection
 
-# Runtime dependencies configuration
-RUNTIME_DEPENDENCIES = [
+_RUNTIME_DEPENDENCIES = [
     RuntimeDependency(
         id="CSharpLanguageServer",
         description="Microsoft.CodeAnalysis.LanguageServer for Windows (x64)",
@@ -110,6 +109,14 @@ RUNTIME_DEPENDENCIES = [
     ),
     RuntimeDependency(
         id="DotNetRuntime",
+        description=".NET 9 Runtime for Linux (ARM64)",
+        url="https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.6/dotnet-runtime-9.0.6-linux-arm64.tar.gz",
+        platform_id="linux-arm64",
+        archive_type="tar.gz",
+        binary_name="dotnet",
+    ),
+    RuntimeDependency(
+        id="DotNetRuntime",
         description=".NET 9 Runtime for macOS (x64)",
         url="https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.6/dotnet-runtime-9.0.6-osx-x64.tar.gz",
         platform_id="osx-x64",
@@ -173,8 +180,22 @@ def find_solution_or_project_file(root_dir: str) -> str | None:
 
 class CSharpLanguageServer(SolidLanguageServer):
     """
-    Provides C# specific instantiation of the LanguageServer class using Microsoft.CodeAnalysis.LanguageServer.
-    This is the official Roslyn-based language server from Microsoft.
+    Provides C# specific instantiation of the LanguageServer class using `Microsoft.CodeAnalysis.LanguageServer`,
+    the official Roslyn-based language server from Microsoft.
+
+    You can pass a list of runtime dependency overrides in ls_specific_settings["csharp"]. This is a list of
+    dicts, each containing at least the "id" key, and optionally "platform_id" to uniquely identify the dependency to override.
+    For example, to override the URL of the .NET runtime on windows-x64, add the entry:
+
+    ```
+        {
+            "id": "DotNetRuntime",
+            "platform_id": "win-x64",
+            "url": "https://example.com/custom-dotnet-runtime.zip"
+        }
+    ```
+
+    See the `_RUNTIME_DEPENDENCIES` variable above for the available dependency ids and platform_ids.
     """
 
     def __init__(
@@ -227,52 +248,43 @@ class CSharpLanguageServer(SolidLanguageServer):
         Ensure .NET runtime and Microsoft.CodeAnalysis.LanguageServer are available.
         Returns a tuple of (dotnet_path, language_server_dll_path).
         """
-        runtime_id = CSharpLanguageServer._get_runtime_id()
-        lang_server_dep, dotnet_runtime_dep = CSharpLanguageServer._get_runtime_dependencies(runtime_id)
+        language_enum = cls.get_language_enum_instance()
+        ls_specific_settings = solidlsp_settings.ls_specific_settings or {}
+        language_specific_config = ls_specific_settings.get(language_enum, {})
+        runtime_dependency_overrides = cast(list[dict[str, Any]], language_specific_config.get("runtime_dependencies", []))
+
+        logger.log("Resolving runtime dependencies", logging.DEBUG)
+        if language_specific_config:
+            logger.log(
+                f"Language-specific config for {language_enum}: {language_specific_config}",
+                logging.DEBUG,
+            )
+
+        runtime_dependencies = RuntimeDependencyCollection(
+            _RUNTIME_DEPENDENCIES,
+            overrides=runtime_dependency_overrides,
+        )
+
+        logger.log(
+            f"Available runtime dependencies: {runtime_dependencies.get_dependencies_for_current_platform}",
+            logging.DEBUG,
+        )
+
+        # Find the dependencies for our platform
+        lang_server_dep = runtime_dependencies.get_single_dep_for_current_platform("CSharpLanguageServer")
+        dotnet_runtime_dep = runtime_dependencies.get_single_dep_for_current_platform("DotNetRuntime")
         dotnet_path = CSharpLanguageServer._ensure_dotnet_runtime(logger, dotnet_runtime_dep, solidlsp_settings)
         server_dll_path = CSharpLanguageServer._ensure_language_server(logger, lang_server_dep, solidlsp_settings)
 
         return dotnet_path, server_dll_path
 
-    @staticmethod
-    def _get_runtime_id() -> str:
-        """Determine the runtime ID based on the platform."""
-        system = platform.system().lower()
-        machine = platform.machine().lower()
-
-        if system == "windows":
-            return "win-x64" if machine in ["amd64", "x86_64"] else "win-arm64"
-        elif system == "darwin":
-            return "osx-x64" if machine in ["x86_64"] else "osx-arm64"
-        elif system == "linux":
-            return "linux-x64" if machine in ["x86_64", "amd64"] else "linux-arm64"
-        else:
-            raise SolidLSPException(f"Unsupported platform: {system} {machine}")
-
-    @staticmethod
-    def _get_runtime_dependencies(runtime_id: str) -> tuple[RuntimeDependency, RuntimeDependency]:
-        """Get the language server and .NET runtime dependencies for the platform."""
-        lang_server_dep = None
-        dotnet_runtime_dep = None
-
-        for dep in RUNTIME_DEPENDENCIES:
-            if dep.id == "CSharpLanguageServer" and dep.platform_id == runtime_id:
-                lang_server_dep = dep
-            elif dep.id == "DotNetRuntime" and dep.platform_id == runtime_id:
-                dotnet_runtime_dep = dep
-
-        if not lang_server_dep:
-            raise SolidLSPException(f"No C# language server dependency found for platform {runtime_id}")
-        if not dotnet_runtime_dep:
-            raise SolidLSPException(f"No .NET runtime dependency found for platform {runtime_id}")
-
-        return lang_server_dep, dotnet_runtime_dep
-
     @classmethod
     def _ensure_dotnet_runtime(
-        cls, logger: LanguageServerLogger, runtime_dep: RuntimeDependency, solidlsp_settings: SolidLSPSettings
+        cls, logger: LanguageServerLogger, dotnet_runtime_dep: RuntimeDependency, solidlsp_settings: SolidLSPSettings
     ) -> str:
         """Ensure .NET runtime is available and return the dotnet executable path."""
+        # TODO: use RuntimeDependency util methods instead of custom validation/download logic
+
         # Check if dotnet is already available on the system
         system_dotnet = shutil.which("dotnet")
         if system_dotnet:
@@ -286,7 +298,7 @@ class CSharpLanguageServer(SolidLanguageServer):
                 pass
 
         # Download .NET 9 runtime using config
-        return cls._ensure_dotnet_runtime_from_config(logger, runtime_dep, solidlsp_settings)
+        return cls._ensure_dotnet_runtime_from_config(logger, dotnet_runtime_dep, solidlsp_settings)
 
     @classmethod
     def _ensure_language_server(
@@ -318,7 +330,7 @@ class CSharpLanguageServer(SolidLanguageServer):
 
         # Make executable on Unix systems
         if platform.system().lower() != "windows":
-            server_dll.chmod(server_dll.stat().st_mode | stat.S_IEXEC)
+            server_dll.chmod(0o755)
 
         logger.log(f"Successfully installed Microsoft.CodeAnalysis.LanguageServer to {server_dll}", logging.INFO)
         return str(server_dll)
@@ -391,8 +403,9 @@ class CSharpLanguageServer(SolidLanguageServer):
             package_extract_dir = temp_dir / f"{package_name}.{package_version}"
             package_extract_dir.mkdir(exist_ok=True)
 
-            with zipfile.ZipFile(nupkg_file, "r") as zip_ref:
-                zip_ref.extractall(package_extract_dir)
+            # Use SafeZipExtractor to handle long paths and skip errors
+            extractor = SafeZipExtractor(archive_path=nupkg_file, extract_dir=package_extract_dir, verbose=False)
+            extractor.extract_all()
 
             # Clean up the nupkg file
             nupkg_file.unlink()
@@ -407,12 +420,14 @@ class CSharpLanguageServer(SolidLanguageServer):
 
     @classmethod
     def _ensure_dotnet_runtime_from_config(
-        cls, logger: LanguageServerLogger, runtime_dep: RuntimeDependency, solidlsp_settings: SolidLSPSettings
+        cls, logger: LanguageServerLogger, dotnet_runtime_dep: RuntimeDependency, solidlsp_settings: SolidLSPSettings
     ) -> str:
         """
         Ensure .NET 9 runtime is available using runtime dependency configuration.
         Returns the path to the dotnet executable.
         """
+        # TODO: use RuntimeDependency util methods instead of custom download logic
+
         # Check if dotnet is already available on the system
         system_dotnet = shutil.which("dotnet")
         if system_dotnet:
@@ -427,8 +442,7 @@ class CSharpLanguageServer(SolidLanguageServer):
 
         # Download .NET 9 runtime using config
         dotnet_dir = Path(cls.ls_resources_dir(solidlsp_settings)) / "dotnet-runtime-9.0"
-        assert runtime_dep.binary_name is not None
-        dotnet_exe = dotnet_dir / runtime_dep.binary_name
+        dotnet_exe = dotnet_dir / dotnet_runtime_dep.binary_name
 
         if dotnet_exe.exists():
             logger.log(f"Using cached .NET runtime from {dotnet_exe}", logging.INFO)
@@ -438,9 +452,16 @@ class CSharpLanguageServer(SolidLanguageServer):
         logger.log("Downloading .NET 9 runtime...", logging.INFO)
         dotnet_dir.mkdir(parents=True, exist_ok=True)
 
-        url = runtime_dep.url
-        assert url is not None
-        archive_type = runtime_dep.archive_type
+        custom_dotnet_runtime_url = solidlsp_settings.ls_specific_settings.get(cls.get_language_enum_instance(), {}).get(
+            "dotnet_runtime_url"
+        )
+        if custom_dotnet_runtime_url is not None:
+            logger.log(f"Using custom .NET runtime url: {custom_dotnet_runtime_url}", logging.INFO)
+            url = custom_dotnet_runtime_url
+        else:
+            url = dotnet_runtime_dep.url
+
+        archive_type = dotnet_runtime_dep.archive_type
 
         # Download the runtime
         download_path = dotnet_dir / f"dotnet-runtime.{archive_type}"
@@ -462,7 +483,7 @@ class CSharpLanguageServer(SolidLanguageServer):
 
             # Make dotnet executable on Unix
             if platform.system().lower() != "windows":
-                dotnet_exe.chmod(dotnet_exe.stat().st_mode | stat.S_IEXEC)
+                dotnet_exe.chmod(0o755)
 
             logger.log(f"Successfully installed .NET 9 runtime to {dotnet_exe}", logging.INFO)
             return str(dotnet_exe)
@@ -629,6 +650,9 @@ class CSharpLanguageServer(SolidLanguageServer):
             # Just acknowledge the request - we don't need to track these for now
             return
 
+        def handle_project_needs_restore(params):
+            return
+
         # Set up notification handlers
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", handle_progress)
@@ -636,6 +660,7 @@ class CSharpLanguageServer(SolidLanguageServer):
         self.server.on_request("workspace/configuration", handle_workspace_configuration)
         self.server.on_request("window/workDoneProgress/create", handle_work_done_progress_create)
         self.server.on_request("client/registerCapability", handle_register_capability)
+        self.server.on_request("workspace/_roslyn_projectNeedsRestore", handle_project_needs_restore)
 
         self.logger.log("Starting Microsoft.CodeAnalysis.LanguageServer process", logging.INFO)
 
@@ -736,3 +761,7 @@ class CSharpLanguageServer(SolidLanguageServer):
             project_uris = [PathUtils.path_to_uri(project_file) for project_file in project_files]
             self.server.notify.send_notification("project/open", {"projects": project_uris})
             self.logger.log(f"Opened project files: {project_files}", logging.DEBUG)
+
+    @override
+    def _get_wait_time_for_cross_file_referencing(self) -> float:
+        return 2

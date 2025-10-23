@@ -7,7 +7,6 @@ import logging
 import os
 import pathlib
 import shutil
-import stat
 import threading
 import uuid
 from pathlib import PurePath
@@ -169,7 +168,7 @@ class EclipseJDTLS(SolidLanguageServer):
         runtime_dependencies = {
             "gradle": {
                 "platform-agnostic": {
-                    "url": "https://services.gradle.org/distributions/gradle-7.3.3-bin.zip",
+                    "url": "https://services.gradle.org/distributions/gradle-8.14.2-bin.zip",
                     "archiveType": "zip",
                     "relative_extraction_path": ".",
                 }
@@ -246,7 +245,7 @@ class EclipseJDTLS(SolidLanguageServer):
         gradle_path = str(
             PurePath(
                 cls.ls_resources_dir(solidlsp_settings),
-                "gradle-7.3.3",
+                "gradle-8.14.2",
             )
         )
 
@@ -280,7 +279,7 @@ class EclipseJDTLS(SolidLanguageServer):
         ):
             FileUtils.download_and_extract_archive(logger, dependency["url"], vscode_java_path, dependency["archiveType"])
 
-        os.chmod(jre_path, stat.S_IEXEC)
+        os.chmod(jre_path, 0o755)
 
         assert os.path.exists(vscode_java_path)
         assert os.path.exists(jre_home_path)
@@ -533,7 +532,7 @@ class EclipseJDTLS(SolidLanguageServer):
                             },
                             "gradle": {
                                 "enabled": True,
-                                "wrapper": {"enabled": True},
+                                "wrapper": {"enabled": False},
                                 "version": None,
                                 "home": "abs(static/gradle-7.3.3)",
                                 "java": {"home": "abs(static/launch_jres/21.0.7-linux-x86_64)"},

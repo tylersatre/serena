@@ -14,6 +14,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from copy import copy
 from pathlib import Path, PurePath
+from time import sleep
 from typing import Self, Union, cast
 
 import pathspec
@@ -25,6 +26,7 @@ from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_handler import SolidLanguageServerHandler
 from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_types import UnifiedSymbolInformation
 from solidlsp.ls_utils import FileUtils, PathUtils, TextUtils
 from solidlsp.lsp_protocol_handler import lsp_types
 from solidlsp.lsp_protocol_handler import lsp_types as LSPTypes
@@ -82,6 +84,8 @@ class SolidLanguageServer(ABC):
     It is used to communicate with Language Servers of different programming languages.
     """
 
+    CACHE_FOLDER_NAME = "cache"
+
     # To be overridden and extended by subclasses
     def is_ignored_dirname(self, dirname: str) -> bool:
         """
@@ -89,6 +93,10 @@ class SolidLanguageServer(ABC):
         in Python and node_modules in JS/TS should be ignored always.
         """
         return dirname.startswith(".")
+
+    @classmethod
+    def get_language_enum_instance(cls) -> Language:
+        return Language.from_ls_class(cls)
 
     @classmethod
     def ls_resources_dir(cls, solidlsp_settings: SolidLSPSettings, mkdir: bool = True) -> str:
@@ -127,109 +135,21 @@ class SolidLanguageServer(ABC):
         If language is JS/TS, then ensure that node (v18.16.0 or higher) is installed and in PATH.
 
         :param repository_root_path: The root path of the repository.
-        :param config: The Multilspy configuration.
+        :param config: language server configuration.
         :param logger: The logger to use.
         :param timeout: the timeout for requests to the language server. If None, no timeout will be used.
+        :param solidlsp_settings: additional settings
         :return LanguageServer: A language specific LanguageServer instance.
         """
         ls: SolidLanguageServer
         if solidlsp_settings is None:
             solidlsp_settings = SolidLSPSettings()
 
-        if config.code_language == Language.PYTHON:
-            from solidlsp.language_servers.pyright_server import (
-                PyrightServer,
-            )
-
-            ls = PyrightServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
-        elif config.code_language == Language.PYTHON_JEDI:
-            from solidlsp.language_servers.jedi_server import JediServer
-
-            ls = JediServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
-        elif config.code_language == Language.JAVA:
-            from solidlsp.language_servers.eclipse_jdtls import (
-                EclipseJDTLS,
-            )
-
-            ls = EclipseJDTLS(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
-
-        elif config.code_language == Language.KOTLIN:
-            from solidlsp.language_servers.kotlin_language_server import (
-                KotlinLanguageServer,
-            )
-
-            ls = KotlinLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
-
-        elif config.code_language == Language.RUST:
-            from solidlsp.language_servers.rust_analyzer import (
-                RustAnalyzer,
-            )
-
-            ls = RustAnalyzer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
-
-        elif config.code_language == Language.CSHARP:
-            from solidlsp.language_servers.csharp_language_server import CSharpLanguageServer
-
-            ls = CSharpLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
-        elif config.code_language == Language.CSHARP_OMNISHARP:
-            from solidlsp.language_servers.omnisharp import OmniSharp
-
-            ls = OmniSharp(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
-        elif config.code_language == Language.TYPESCRIPT:
-            from solidlsp.language_servers.typescript_language_server import (
-                TypeScriptLanguageServer,
-            )
-
-            ls = TypeScriptLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
-        elif config.code_language == Language.TYPESCRIPT_VTS:
-            # VTS based Language Server implementation, need to experiment to see if it improves performance
-            from solidlsp.language_servers.vts_language_server import VtsLanguageServer
-
-            ls = VtsLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
-        elif config.code_language == Language.GO:
-            from solidlsp.language_servers.gopls import Gopls
-
-            ls = Gopls(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
-
-        elif config.code_language == Language.RUBY:
-            from solidlsp.language_servers.solargraph import Solargraph
-
-            ls = Solargraph(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
-
-        elif config.code_language == Language.DART:
-            from solidlsp.language_servers.dart_language_server import DartLanguageServer
-
-            ls = DartLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
-
-        elif config.code_language == Language.CPP:
-            from solidlsp.language_servers.clangd_language_server import ClangdLanguageServer
-
-            ls = ClangdLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
-
-        elif config.code_language == Language.PHP:
-            from solidlsp.language_servers.intelephense import Intelephense
-
-            ls = Intelephense(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
-
-        elif config.code_language == Language.CLOJURE:
-            from solidlsp.language_servers.clojure_lsp import ClojureLSP
-
-            ls = ClojureLSP(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
-
-        elif config.code_language == Language.ELIXIR:
-            from solidlsp.language_servers.elixir_tools.elixir_tools import ElixirTools
-
-            ls = ElixirTools(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
-
-        elif config.code_language == Language.TERRAFORM:
-            from solidlsp.language_servers.terraform_ls import TerraformLS
-
-            ls = TerraformLS(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
-
-        else:
-            logger.log(f"Language {config.code_language} is not supported", logging.ERROR)  # type: ignore
-            raise SolidLSPException(f"Language {config.code_language} is not supported")
-
+        ls_class = config.code_language.get_ls_class()
+        # For now, we assume that all language server implementations have the same signature of the constructor
+        # (which, unfortunately, differs from the signature of the base class).
+        # If this assumption is ever violated, we need branching logic here.
+        ls = ls_class(config, logger, repository_root_path, solidlsp_settings)  # type: ignore
         ls.set_request_timeout(timeout)
         return ls
 
@@ -256,6 +176,7 @@ class SolidLanguageServer(ABC):
                     as opposed to HTTP, TCP modes supported by some language servers.
         """
         self._solidlsp_settings = solidlsp_settings
+        self._encoding = config.encoding
         self.logger = logger
         self.repository_root_path: str = repository_root_path
         self.logger.log(
@@ -280,8 +201,8 @@ class SolidLanguageServer(ABC):
         self.completions_available = threading.Event()
         if config.trace_lsp_communication:
 
-            def logging_fn(source: str, target: str, msg: StringDict | str) -> None:
-                self.logger.log(f"LSP: {source} -> {target}: {str(msg)[:90]}...", self.logger.logger.level)
+            def logging_fn(source: str, target: str, msg: StringDict | str):
+                self.logger.log(f"LSP: {source} -> {target}: {msg!s}", self.logger.logger.level)
 
         else:
             logging_fn = None  # type: ignore
@@ -310,6 +231,16 @@ class SolidLanguageServer(ABC):
         self._ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, processed_patterns)
 
         self._request_timeout: float | None = None
+
+        self._has_waited_for_cross_file_references = False
+
+    def _get_wait_time_for_cross_file_referencing(self) -> float:
+        """Meant to be overridden by subclasses for LS that don't have a reliable "finished initializing" signal.
+
+        LS may return incomplete results on calls to `request_references` (only references found in the same file),
+        if the LS is not fully initialized yet.
+        """
+        return 2
 
     def set_request_timeout(self, timeout: float | None) -> None:
         """
@@ -463,7 +394,7 @@ class SolidLanguageServer(ABC):
             yield self.open_file_buffers[uri]
             self.open_file_buffers[uri].ref_count -= 1
         else:
-            contents = FileUtils.read_file(self.logger, absolute_file_path)
+            contents = FileUtils.read_file(absolute_file_path, self._encoding)
 
             version = 0
             self.open_file_buffers[uri] = LSPFileBuffer(uri, contents, version, self.language_id, 1)
@@ -598,6 +529,12 @@ class SolidLanguageServer(ABC):
             )
             raise SolidLSPException("Language Server not started")
 
+        if not self._has_waited_for_cross_file_references:
+            # Some LS require waiting for a while before they can return cross-file definitions.
+            # This is a workaround for such LS that don't have a reliable "finished initializing" signal.
+            sleep(self._get_wait_time_for_cross_file_referencing())
+            self._has_waited_for_cross_file_references = True
+
         with self.open_file(relative_file_path):
             # sending request to the language server and waiting for response
             definition_params = cast(
@@ -624,15 +561,10 @@ class SolidLanguageServer(ABC):
                     new_item.update(item)
                     new_item["absolutePath"] = PathUtils.uri_to_path(new_item["uri"])
                     new_item["relativePath"] = PathUtils.get_relative_path(new_item["absolutePath"], self.repository_root_path)
-                    ret.append(ls_types.Location(new_item))  # type: ignore
-                elif (
-                    LSPConstants.ORIGIN_SELECTION_RANGE in item
-                    and LSPConstants.TARGET_URI in item
-                    and LSPConstants.TARGET_RANGE in item
-                    and LSPConstants.TARGET_SELECTION_RANGE in item
-                ):
-                    new_item = {}
-                    new_item["uri"] = item[LSPConstants.TARGET_URI]  # type: ignore
+                    ret.append(ls_types.Location(new_item))
+                elif LSPConstants.TARGET_URI in item and LSPConstants.TARGET_RANGE in item and LSPConstants.TARGET_SELECTION_RANGE in item:
+                    new_item: ls_types.Location = {}
+                    new_item["uri"] = item[LSPConstants.TARGET_URI]
                     new_item["absolutePath"] = PathUtils.uri_to_path(new_item["uri"])
                     new_item["relativePath"] = PathUtils.get_relative_path(new_item["absolutePath"], self.repository_root_path)
                     new_item["range"] = item[LSPConstants.TARGET_SELECTION_RANGE]  # type: ignore
@@ -689,6 +621,12 @@ class SolidLanguageServer(ABC):
                 logging.ERROR,
             )
             raise SolidLSPException("Language Server not started")
+
+        if not self._has_waited_for_cross_file_references:
+            # Some LS require waiting for a while before they can return cross-file references.
+            # This is a workaround for such LS that don't have a reliable "finished initializing" signal.
+            sleep(self._get_wait_time_for_cross_file_referencing())
+            self._has_waited_for_cross_file_references = True
 
         with self.open_file(relative_file_path):
             try:
@@ -1087,7 +1025,20 @@ class SolidLanguageServer(ABC):
 
             for contained_dir_or_file_name in contained_dir_or_file_names:
                 contained_dir_or_file_abs_path = os.path.join(abs_dir_path, contained_dir_or_file_name)
-                contained_dir_or_file_rel_path = str(Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path))
+
+                # obtain relative path
+                try:
+                    contained_dir_or_file_rel_path = str(
+                        Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path)
+                    )
+                except ValueError as e:
+                    # Typically happens when the path is not under the repository root (e.g., symlink pointing outside)
+                    self.logger.log(
+                        f"Skipping path {contained_dir_or_file_abs_path}; likely outside of the repository root {self.repository_root_path} [cause: {e}]",
+                        logging.WARNING,
+                    )
+                    continue
+
                 if self.is_ignored_path(contained_dir_or_file_rel_path):
                     self.logger.log(f"Skipping item: {contained_dir_or_file_rel_path}\n(because it should be ignored)", logging.DEBUG)
                     continue
@@ -1157,33 +1108,44 @@ class SolidLanguageServer(ABC):
         end_column = len(lines[-1])
         return ls_types.Range(start=ls_types.Position(line=0, character=0), end=ls_types.Position(line=end_line, character=end_column))
 
-    def request_dir_overview(self, relative_dir_path: str) -> dict[str, list[tuple[str, ls_types.SymbolKind, int, int]]]:
+    def request_dir_overview(self, relative_dir_path: str) -> dict[str, list[UnifiedSymbolInformation]]:
         """
-        An overview of the given directory.
-
-        Maps relative paths of all contained files to info about top-level symbols in the file
-        (name, kind, line, column).
+        :return: A mapping of all relative paths analyzed to lists of top-level symbols in the corresponding file.
         """
         symbol_tree = self.request_full_symbol_tree(relative_dir_path)
         # Initialize result dictionary
-        result: dict[str, list[tuple[str, ls_types.SymbolKind, int, int]]] = defaultdict(list)
+        result: dict[str, list[UnifiedSymbolInformation]] = defaultdict(list)
 
         # Helper function to process a symbol and its children
         def process_symbol(symbol: ls_types.UnifiedSymbolInformation) -> None:
             if symbol["kind"] == ls_types.SymbolKind.File:
                 # For file symbols, process their children (top-level symbols)
                 for child in symbol["children"]:
-                    assert "location" in child
-                    assert "selectionRange" in child
-                    path = Path(child["location"]["absolutePath"]).resolve().relative_to(self.repository_root_path)
-                    result[str(path)].append(
-                        (
-                            child["name"],
-                            child["kind"],
-                            child["selectionRange"]["start"]["line"],
-                            child["selectionRange"]["start"]["character"],
-                        )
-                    )
+                    # Handle cross-platform path resolution (fixes Docker/macOS path issues)
+                    absolute_path = Path(child["location"]["absolutePath"]).resolve()
+                    repository_root = Path(self.repository_root_path).resolve()
+
+                    # Try pathlib first, fallback to alternative approach if paths are incompatible
+                    try:
+                        path = absolute_path.relative_to(repository_root)
+                    except ValueError:
+                        # If paths are from different roots (e.g., /workspaces vs /Users),
+                        # use the relativePath from location if available, or extract from absolutePath
+                        if "relativePath" in child["location"] and child["location"]["relativePath"]:
+                            path = Path(child["location"]["relativePath"])
+                        else:
+                            # Extract relative path by finding common structure
+                            # Example: /workspaces/.../test_repo/file.py -> test_repo/file.py
+                            path_parts = absolute_path.parts
+
+                            # Find the last common part or use a fallback
+                            if "test_repo" in path_parts:
+                                test_repo_idx = path_parts.index("test_repo")
+                                path = Path(*path_parts[test_repo_idx:])
+                            else:
+                                # Last resort: use filename only
+                                path = Path(absolute_path.name)
+                    result[str(path)].append(child)
             # For package/directory symbols, process their children
             for child in symbol["children"]:
                 process_symbol(child)
@@ -1193,28 +1155,19 @@ class SolidLanguageServer(ABC):
             process_symbol(root)
         return result
 
-    def request_document_overview(self, relative_file_path: str) -> list[tuple[str, ls_types.SymbolKind, int, int]]:
+    def request_document_overview(self, relative_file_path: str) -> list[UnifiedSymbolInformation]:
         """
-        An overview of the given file.
-        Returns the list of tuples (name, kind, line, column) of all top-level symbols in the file.
+        :return: the top-level symbols in the given file.
         """
         _, document_roots = self.request_document_symbols(relative_file_path)
-        result = []
-        for root in document_roots:
-            try:
-                result.append(
-                    (root["name"], root["kind"], root["selectionRange"]["start"]["line"], root["selectionRange"]["start"]["character"])
-                )
-            except KeyError as e:
-                raise KeyError(f"Could not process symbol of name {root.get('name', 'unknown')} in {relative_file_path=}") from e
-        return result
+        return document_roots
 
-    def request_overview(self, within_relative_path: str) -> dict[str, list[tuple[str, ls_types.SymbolKind, int, int]]]:
+    def request_overview(self, within_relative_path: str) -> dict[str, list[UnifiedSymbolInformation]]:
         """
         An overview of all symbols in the given file or directory.
 
         :param within_relative_path: the relative path to the file or directory to get the overview of.
-        :return: A mapping of all relative paths analyzed to lists of tuples (name, kind, line, column) of all top-level symbols in the corresponding file.
+        :return: A mapping of all relative paths analyzed to lists of top-level symbols in the corresponding file.
         """
         abs_path = (Path(self.repository_root_path) / within_relative_path).resolve()
         if not abs_path.exists():
@@ -1460,7 +1413,7 @@ class SolidLanguageServer(ABC):
         # checking if the line is empty, unfortunately ugly and duplicating code, but I don't want to refactor
         with self.open_file(relative_file_path):
             absolute_file_path = str(PurePath(self.repository_root_path, relative_file_path))
-            content = FileUtils.read_file(self.logger, absolute_file_path)
+            content = FileUtils.read_file(absolute_file_path, self._encoding)
             if content.split("\n")[line].strip() == "":
                 self.logger.log(
                     f"Passing empty lines to request_container_symbol is currently not supported, {relative_file_path=}, {line=}",
@@ -1607,7 +1560,13 @@ class SolidLanguageServer(ABC):
         """
         The path to the cache file for the document symbols.
         """
-        return Path(self.repository_root_path) / ".serena" / "cache" / self.language_id / "document_symbols_cache_v23-06-25.pkl"
+        return (
+            Path(self.repository_root_path)
+            / self._solidlsp_settings.project_data_relative_path
+            / self.CACHE_FOLDER_NAME
+            / self.language_id
+            / "document_symbols_cache_v23-06-25.pkl"
+        )
 
     def save_cache(self) -> None:
         with self._cache_lock:
@@ -1672,6 +1631,52 @@ class SolidLanguageServer(ABC):
             ret.append(ls_types.UnifiedSymbolInformation(**item))  # type: ignore
 
         return ret
+
+    def request_rename_symbol_edit(
+        self,
+        relative_file_path: str,
+        line: int,
+        column: int,
+        new_name: str,
+    ) -> ls_types.WorkspaceEdit | None:
+        """
+        Retrieve a WorkspaceEdit for renaming the symbol at the given location to the new name.
+        Does not apply the edit, just retrieves it. In order to actually rename the symbol, call apply_workspace_edit.
+
+        :param relative_file_path: The relative path to the file containing the symbol
+        :param line: The 0-indexed line number of the symbol
+        :param column: The 0-indexed column number of the symbol
+        :param new_name: The new name for the symbol
+        :return: A WorkspaceEdit containing the changes needed to rename the symbol, or None if rename is not supported
+        """
+        params = ls_types.RenameParams(
+            textDocument=ls_types.TextDocumentIdentifier(
+                uri=pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri()
+            ),
+            position=ls_types.Position(line=line, character=column),
+            newName=new_name,
+        )
+
+        return self.server.send.rename(params)
+
+    def apply_text_edits_to_file(self, relative_path: str, edits: list[ls_types.TextEdit]) -> None:
+        """
+        Apply a list of text edits to a file.
+
+        :param relative_path: The relative path of the file to edit
+        :param edits: List of TextEdit dictionaries to apply
+        """
+        with self.open_file(relative_path):
+            # Sort edits by position (latest first) to avoid position shifts
+            sorted_edits = sorted(edits, key=lambda e: (e["range"]["start"]["line"], e["range"]["start"]["character"]), reverse=True)
+
+            for edit in sorted_edits:
+                start_pos = ls_types.Position(line=edit["range"]["start"]["line"], character=edit["range"]["start"]["character"])
+                end_pos = ls_types.Position(line=edit["range"]["end"]["line"], character=edit["range"]["end"]["character"])
+
+                # Delete the old text and insert the new text
+                self.delete_text_between_positions(relative_path, start_pos, end_pos)
+                self.insert_text_at_position(relative_path, start_pos["line"], start_pos["character"], edit["newText"])
 
     def start(self) -> "SolidLanguageServer":
         """

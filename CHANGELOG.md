@@ -1,9 +1,75 @@
-# Latest
-
+# latest
 Status of the `main` branch. Changes prior to the next official version change will appear here.
+
+* Tools:
+  * Added `RenameSymbolTool` for renaming symbols across the codebase (if LS supports this operation).
+
+* Language support:
+  * **Add support for Scala** via Metals language server (requires some [manual setup](docs/scala_setup_guide_for_serena.md))
+  * **Add support for Elm** via @elm-tooling/elm-language-server (automatically downloads if not installed; requires Elm compiler)
+  * **Add support for Perl** via Perl::LanguageServer with LSP integration for .pl, .pm, and .t files
+  * **Add support for AL (Application Language)** for Microsoft Dynamics 365 Business Central development. Requires VS Code AL extension (ms-dynamics-smb.al).
+  * **Add support for R** via the R languageserver package with LSP integration, performance optimizations, and fallback symbol extraction
+  * **Add support for Zig** via ZLS (cross-file references may not fully work on Windows)
+  * **Add support for Lua** via lua-language-server
+  * **Add support for Nix** requires nixd installation (Windows not supported)
+  * **Dart now officially supported**: Dart was always working, but now tests were added, and it is promoted to "officially supported"
+  * **Rust now uses already installed rustup**: The rust-analyzer is no longer bundled with Serena. Instead, it uses the rust-analyzer from your Rust toolchain managed by rustup. This ensures compatibility with your Rust version and eliminates outdated bundled binaries.
+  * **Kotlin now officially supported**: We now use the official Kotlin LS, tests run through and performance is good, even though the LS is in an early development stage. 
+  * **Add support for Erlang** experimental, may hang or be slow, uses the recently archived [erlang_ls](https://github.com/erlang-ls/erlang_ls)
+  * **Ruby dual language server support**: Added ruby-lsp as the modern primary Ruby language server. Solargraph remains available as an experimental legacy option. ruby-lsp supports both .rb and .erb files, while Solargraph supports .rb files only.
+
+* Client support:
+  * New mode `oaicompat-agent` and extensions in the openai tool compatibility, **permitting Serena to work with llama.cpp**
+
+* General:
+  * Various fixes related to indexing, special paths and determation of ignored paths
+  * Decreased `TOOL_DEFAULT_MAX_ANSWER_LENGTH` to be in accordance with (below) typical max-tokens configurations
+  * Allow passing language server specific settings through `ls_specific_settings` field (in `serena_config.yml`)
+
+# 0.1.4
+
+## Summary
+
+This likely is the last release before the stable version 1.0.0 which will come together with the jetbrains IDE extension.
+We release it for users who install Serena from a tag, since the last tag cannot be installed due to a breaking change in the mcp dependency (see #381).
+
+Since the last release, several new languages were supported, and the Serena CLI and configurability were significantly extended.
+We thank all external contributors who made a lot of the improvements possible!
+
+* General:
+  * **Initial instructions no longer need to be loaded by the user**
+  * Significantly extended CLI
+  * Removed `replace_regex` tool from `ide-assistant` and `codex` contexts.
+    The current string replacement tool in Claude Code seems to be sufficiently efficient and is better
+    integrated with the IDE. Users who want to enable `replace_regex` can do so by customizing the context.
+
+* Configuration:
+  * Simplify customization of modes and contexts, including CLI support.
+  * Possibility to customize the system prompt and outputs of simple tools, including CLI support.
+  * Possibility to override tool descriptions through the context YAML.
+  * Prompt templates are now automatically adapted to the enabled tools.
+  * Several tools are now excluded by default, need to be included explicitly.
+  * New context for ChatGPT
+
+* Language servers:
+  * Reliably detect language server termination and propagate the respective error all the way
+    back to the tool application, where an unexpected termination is handled by restarting the language server
+    and subsequently retrying the tool application.
+  * **Add support for Swift**
+  * **Add support for Bash**
+  * Enhance Solargraph (Ruby) integration
+    * Automatic Rails project detection via config/application.rb, Rakefile, and Gemfile analysis
+    * Ruby/Rails-specific exclude patterns for improved indexing performance (vendor/, .bundle/, tmp/, log/, coverage/)
+    * Enhanced error handling with detailed diagnostics and Ruby manager-specific installation instructions (rbenv, RVM, asdf)
+    * Improved LSP capability negotiation and analysis completion detection
+    * Better Bundler and Solargraph installation error messages with clear resolution steps
 
 Fixes:
 * Ignore `.git` in check for ignored paths and improve performance of `find_all_non_ignored_files`
+* Fix language server startup issues on Windows when using Claude Code (which was due to
+  default shell reconfiguration imposed by Claude Code)
+* Additional wait for initialization in C# language server before requesting references, allowing cross-file references to be found.
 
 # 0.1.3
 

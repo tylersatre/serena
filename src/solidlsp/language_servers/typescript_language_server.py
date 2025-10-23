@@ -75,7 +75,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
     @classmethod
     def _setup_runtime_dependencies(
         cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
-    ) -> str:
+    ) -> list[str]:
         """
         Setup runtime dependencies for TypeScript Language Server and return the command to start the server.
         """
@@ -97,13 +97,13 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                 RuntimeDependency(
                     id="typescript",
                     description="typescript package",
-                    command="npm install --prefix ./ typescript@5.5.4",
+                    command=["npm", "install", "--prefix", "./", "typescript@5.5.4"],
                     platform_id="any",
                 ),
                 RuntimeDependency(
                     id="typescript-language-server",
                     description="typescript-language-server package",
-                    command="npm install --prefix ./ typescript-language-server@4.3.3",
+                    command=["npm", "install", "--prefix", "./", "typescript-language-server@4.3.3"],
                     platform_id="any",
                 ),
             ]
@@ -133,7 +133,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             raise FileNotFoundError(
                 f"typescript-language-server executable not found at {tsserver_executable_path}, something went wrong with the installation."
             )
-        return f"{tsserver_executable_path} --stdio"
+        return [tsserver_executable_path, "--stdio"]
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
@@ -252,12 +252,5 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         self.completions_available.set()
 
     @override
-    # For some reason, the LS may need longer to process this, so we just retry
-    def _send_references_request(self, relative_file_path: str, line: int, column: int) -> list[lsp_types.Location] | None:
-        # TODO: The LS doesn't return references contained in other files if it doesn't sleep. This is
-        #   despite the LS having processed requests already. I don't know what causes this, but sleeping
-        #   one second helps. It may be that sleeping only once is enough but that's hard to reliably test.
-        #   It may be that even this 1sec is not enough in larger TS projects, at some point we should find what
-        #   causes this and solve it.
-        sleep(1)
-        return super()._send_references_request(relative_file_path, line, column)
+    def _get_wait_time_for_cross_file_referencing(self) -> float:
+        return 1

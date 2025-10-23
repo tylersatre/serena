@@ -1,10 +1,10 @@
 import json
 
-from serena.tools import TOOL_DEFAULT_MAX_ANSWER_LENGTH, Tool, ToolMarkerOptional
+from serena.tools import Tool, ToolMarkerOptional, ToolMarkerSymbolicRead
 from serena.tools.jetbrains_plugin_client import JetBrainsPluginClient
 
 
-class JetBrainsFindSymbolTool(Tool, ToolMarkerOptional):
+class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
     """
     Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
     """
@@ -15,7 +15,7 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerOptional):
         depth: int = 0,
         relative_path: str | None = None,
         include_body: bool = False,
-        max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH,
+        max_answer_chars: int = -1,
     ) -> str:
         """
         Retrieves information on all symbols/code entities (classes, methods, etc.) based on the given `name_path`,
@@ -57,6 +57,7 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerOptional):
             speed up the search as well as reduce the number of results.
         :param include_body: If True, include the symbol's source code. Use judiciously.
         :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
+            -1 means the default value from the config will be used.
         :return: JSON string: a list of symbols (with locations) matching the name.
         """
         with JetBrainsPluginClient.from_project(self.project) as client:
@@ -70,7 +71,7 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerOptional):
         return self._limit_length(result, max_answer_chars)
 
 
-class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerOptional):
+class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
     """
     Finds symbols that reference the given symbol
     """
@@ -79,7 +80,7 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerOptional):
         self,
         name_path: str,
         relative_path: str,
-        max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH,
+        max_answer_chars: int = -1,
     ) -> str:
         """
         Finds symbols that reference the symbol at the given `name_path`.
@@ -88,7 +89,8 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerOptional):
         :param name_path: name path of the symbol for which to find references; matching logic as described in find symbol tool.
         :param relative_path: the relative path to the file containing the symbol for which to find references.
             Note that here you can't pass a directory but must pass a file.
-        :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
+        :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned. -1 means the
+            default value from the config will be used.
         :return: a list of JSON objects with the symbols referencing the requested symbol
         """
         with JetBrainsPluginClient.from_project(self.project) as client:
@@ -100,7 +102,7 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerOptional):
         return self._limit_length(result, max_answer_chars)
 
 
-class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerOptional):
+class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
     """
     Retrieves an overview of the top-level symbols within a specified file
     """
@@ -108,7 +110,7 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerOptional):
     def apply(
         self,
         relative_path: str,
-        max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH,
+        max_answer_chars: int = -1,
     ) -> str:
         """
         Gets an overview of the top-level symbols in the given file.
@@ -119,6 +121,7 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerOptional):
 
         :param relative_path: the relative path to the file to get the overview of
         :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
+            -1 means the default value from the config will be used.
         :return: a JSON object containing the symbols
         """
         with JetBrainsPluginClient.from_project(self.project) as client:
