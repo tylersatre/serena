@@ -1,6 +1,6 @@
-## Additional Usage Pointers
+# Additional Usage Pointers
 
-### Prompting Strategies
+## Prompting Strategies
 
 We found that it is often a good idea to spend some time conceptualizing and planning a task
 before actually implementing it, especially for non-trivial task. This helps both in achieving
@@ -8,7 +8,7 @@ better results and in increasing the feeling of control and staying in the loop.
 make a detailed plan in one session, where Serena may read a lot of your code to build up the context,
 and then continue with the implementation in another (potentially after creating suitable memories).
 
-### Running Out of Context
+## Running Out of Context
 
 For long and complicated tasks, or tasks where Serena has read a lot of content, you
 may come close to the limits of context tokens. In that case, it is often a good idea to continue
@@ -23,7 +23,7 @@ it's on the right track.
 Serena instructs the LLM to be economical in general, so the problem of running out of context
 should not occur too often, unless the task is very large or complicated.
 
-### Serena and Git Worktrees
+## Serena and Git Worktrees
 
 [git-worktree](https://git-scm.com/docs/git-worktree) can be an excellent way to parallelize your work. More on this in [Anthropic: Run parallel Claude Code sessions with Git worktrees](https://docs.claude.com/en/docs/claude-code/common-workflows#run-parallel-claude-code-sessions-with-git-worktrees).
 
