@@ -840,7 +840,7 @@ class SolidLanguageServer(ABC):
         :param relative_file_path: The relative path of the file that has the symbols
         :param include_body: whether to include the body of the symbols in the result.
         :return: A list of symbols in the file, and a list of root symbols that represent the tree structure of the symbols.
-            All symbols will have a location, a children, and a parent attribute,
+            All symbols will have a location, children, and a parent attribute,
             where the parent attribute is None for root symbols.
             Note that this is slightly different from the call to request_full_symbol_tree,
             where the parent attribute will be the file symbol which in turn may have a package symbol as parent.
