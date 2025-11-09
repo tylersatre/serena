@@ -13,7 +13,7 @@ from pathlib import PurePath
 
 from overrides import override
 
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import GenericDocumentSymbol, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformUtils
@@ -788,3 +788,23 @@ class EclipseJDTLS(SolidLanguageServer):
 
         # TODO: Add comments about why we wait here, and how this can be optimized
         self.service_ready_event.wait()
+
+    def _request_document_symbols(self, relative_file_path: str, include_body: bool = False) -> list[GenericDocumentSymbol]:
+        result = super()._request_document_symbols(relative_file_path, include_body)
+
+        # JDTLS sometimes returns symbol names with type information to handle overloads,
+        # e.g. "myMethod(int) <T>", but we want overloads to be handled via overload_idx,
+        # which requires the name to be just "myMethod".
+
+        def fix_name(symbol: GenericDocumentSymbol):
+            if "(" in symbol["name"]:
+                symbol["name"] = symbol["name"][: symbol["name"].index("(")]
+            children = symbol.get("children")
+            if children:
+                for child in children:
+                    fix_name(child)
+
+        for root_symbol in result:
+            fix_name(root_symbol)
+
+        return result
