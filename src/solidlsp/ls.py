@@ -833,12 +833,14 @@ class SolidLanguageServer(ABC):
 
     def _request_document_symbols(self, relative_file_path: str, include_body: bool = False) -> list[GenericDocumentSymbol]:
         """
-        Sends a [textDocument/documentSymbol](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_documentSymbol) request to the Language Server
-        to find symbols in the given file. Wait for the response and return the result.
+        Sends a [documentSymbol](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_documentSymbol)
+        request to the language server to find symbols in the given file, which is assumed to be opened while the call is active.
+        Waits for the response and returns it.
 
-        :param relative_file_path:
-        :param include_body:
-        :return:
+        :param relative_file_path: the relative path of the file that has the symbols.
+            IMPORTANT: It must be ensured that the file is already opened in the Language Server before calling this method.
+        :param include_body: whether to include the body of the symbols in the result.
+        :return: the list of symbols in the file.
         """
         self.logger.log(f"Requesting document symbols for {relative_file_path} from the Language Server", logging.DEBUG)
         response = self.server.send.document_symbol(
@@ -878,8 +880,9 @@ class SolidLanguageServer(ABC):
                 else:
                     self.logger.log(f"No cache hit for symbols with {include_body=} in {relative_file_path}", logging.DEBUG)
 
-        # request the symbols from the language server
-        response = self._request_document_symbols(relative_file_path, include_body=include_body)
+            # request the symbols from the language server
+            response = self._request_document_symbols(relative_file_path, include_body=include_body)
+
         if response is None:
             self.logger.log(
                 f"Received None response from the Language Server for document symbols in {relative_file_path}. "
