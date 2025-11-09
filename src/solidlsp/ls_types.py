@@ -245,9 +245,9 @@ class UnifiedSymbolInformation(TypedDict):
 
     overload_idx: NotRequired[int]
     """
-    The overload index of the symbol, if applicable. If the symbol is an overloaded function or method
-    (same symbol name with the same parent), this index indicates which overload it is. 
-    The index is 0-based.
+    The overload index of the symbol, if applicable. If a symbol does not have overloads, this field is omitted.
+    If the symbol is an overloaded function or method (same symbol name with the same parent), 
+    this index indicates which overload it is. The index is 0-based.
     Added for Serena, not part of the LSP.
     """
 

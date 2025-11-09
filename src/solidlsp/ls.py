@@ -942,11 +942,15 @@ class SolidLanguageServer(ABC):
             Converts the given nodes into UnifiedSymbolInformation with proper parent-child relationships,
             adding overload indices for symbols with the same name under the same parent.
             """
+            total_name_counts = defaultdict(lambda: 0)
+            for node in nodes:
+                total_name_counts[node["name"]] += 1
             name_counts = defaultdict(lambda: 0)
             for node in nodes:
                 flat_all_symbol_list.append(node)
                 usymbol_node = turn_item_into_symbol_with_children(node)
-                usymbol_node["overload_idx"] = name_counts[usymbol_node["name"]]
+                if total_name_counts[usymbol_node["name"]] > 1:
+                    usymbol_node["overload_idx"] = name_counts[usymbol_node["name"]]
                 name_counts[usymbol_node["name"]] += 1
                 usymbol_node["parent"] = parent
                 if usymbol_node["children"]:
