@@ -28,15 +28,12 @@ class Intelephense(SolidLanguageServer):
     You can pass the following entries in ls_specific_settings["php"]:
         - maxMemory: sets intelephense.maxMemory
         - maxFileSize: sets intelephense.files.maxSize
+        - ignore_vendor: whether or ignore directories named "vendor" (default: true)
     """
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
-        # For PHP projects, we should ignore:
-        # - vendor: third-party dependencies <managed by Composer
-        # - node_modules: if the project has JavaScript components
-        # - cache: commonly used for caching
-        return super().is_ignored_dirname(dirname) or dirname in ["node_modules", "vendor", "cache"]
+        return super().is_ignored_dirname(dirname) or dirname in self._ignored_dirnames
 
     @classmethod
     def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, solidlsp_settings: SolidLSPSettings) -> list[str]:
@@ -99,6 +96,18 @@ class Intelephense(SolidLanguageServer):
             solidlsp_settings,
         )
         self.request_id = 0
+
+        # For PHP projects, we should ignore:
+        # - node_modules: if the project has JavaScript components
+        # - cache: commonly used for caching
+        # - (configurable) vendor: third-party dependencies <managed by Composer
+        self._ignored_dirnames = {"node_modules", "cache"}
+        if self._custom_settings.get("ignore_vendor", True):
+            self._ignored_dirnames.add("vendor")
+        self.logger.log(
+            f"Ignoring the following directories for PHP projects: {', '.join(sorted(self._ignored_dirnames))}",
+            logging.INFO,
+        )
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
