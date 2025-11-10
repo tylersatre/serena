@@ -79,7 +79,7 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
 
 class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
     """
-    Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
+    Performs a global (or local) search using the language server backend.
     """
 
     # noinspection PyDefaultArgument
@@ -163,7 +163,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
 
 class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
     """
-    Finds symbols that reference the symbol at the given location (optionally filtered by type).
+    Finds symbols that reference the given symbol using the language server backend
     """
 
     # noinspection PyDefaultArgument
@@ -216,7 +216,7 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
 
 class ReplaceSymbolBodyTool(Tool, ToolMarkerSymbolicEdit):
     """
-    Replaces the full definition of a symbol.
+    Replaces the full definition of a symbol using the language server backend.
     """
 
     def apply(

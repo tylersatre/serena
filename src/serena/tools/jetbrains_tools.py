@@ -6,7 +6,7 @@ from serena.tools.jetbrains_plugin_client import JetBrainsPluginClient
 
 class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
     """
-    Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
+    Performs a global (or local) search for symbols using the JetBrains backend
     """
 
     def apply(
@@ -73,7 +73,7 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
 
 class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
     """
-    Finds symbols that reference the given symbol
+    Finds symbols that reference the given symbol using the JetBrains backend
     """
 
     def apply(
@@ -104,7 +104,7 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
 
 class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
     """
-    Retrieves an overview of the top-level symbols within a specified file
+    Retrieves an overview of the top-level symbols within a specified file using the JetBrains backend
     """
 
     def apply(
