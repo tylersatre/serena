@@ -343,7 +343,7 @@ class EclipseJDTLS(SolidLanguageServer):
         repo_uri = pathlib.Path(repository_absolute_path).as_uri()
 
         # Load user's Maven and Gradle configuration paths from ls_specific_settings["java"]
-        custom_java_settings = self._solidlsp_settings.ls_specific_settings.get(self.get_language_enum_instance(), {})
+        custom_java_settings = self._custom_settings
 
         # Maven settings: default to ~/.m2/settings.xml
         default_maven_settings = os.path.join(os.path.expanduser("~"), ".m2", "settings.xml")

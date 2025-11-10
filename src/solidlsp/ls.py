@@ -176,6 +176,7 @@ class SolidLanguageServer(ABC):
                     as opposed to HTTP, TCP modes supported by some language servers.
         """
         self._solidlsp_settings = solidlsp_settings
+        self._custom_settings = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance())
         self._encoding = config.encoding
         self.logger = logger
         self.repository_root_path: str = repository_root_path

@@ -23,7 +23,7 @@ class SolidLSPSettings:
     For instance, if this is ".solidlsp" and the project is located at "/home/user/myproject",
     then Solid-LSP will store project-specific data in "/home/user/myproject/.solidlsp".
     """
-    ls_specific_settings: dict["Language", Any] = field(default_factory=dict)
+    ls_specific_settings: dict["Language", dict[str, Any]] = field(default_factory=dict)
     """
     Advanced configuration option allowing to configure language server implementation specific options.
     Have a look at the docstring of the constructors of the corresponding LS implementations within solidlsp to see which options are available.
@@ -37,3 +37,12 @@ class SolidLSPSettings:
     @property
     def ls_resources_dir(self):
         return os.path.join(str(self.solidlsp_dir), "language_servers", "static")
+
+    def get_ls_specific_settings(self, language: "Language") -> dict[str, Any]:
+        """
+        Get the language server specific settings for the given language.
+
+        :param language: The programming language.
+        :return: A dictionary of settings for the language server.
+        """
+        return self.ls_specific_settings.get(language, {})
