@@ -343,52 +343,51 @@ class EclipseJDTLS(SolidLanguageServer):
         repo_uri = pathlib.Path(repository_absolute_path).as_uri()
 
         # Load user's Maven and Gradle configuration paths from ls_specific_settings["java"]
-        custom_java_settings = self._custom_settings
 
         # Maven settings: default to ~/.m2/settings.xml
-        default_maven_settings = os.path.join(os.path.expanduser("~"), ".m2", "settings.xml")
-        maven_user_settings = None
-        if "maven_user_settings" in custom_java_settings:
+        default_maven_settings_path = os.path.join(os.path.expanduser("~"), ".m2", "settings.xml")
+        custom_maven_settings_path = self._custom_settings.get("maven_user_settings")
+        if custom_maven_settings_path is not None:
             # User explicitly provided a path
-            maven_settings_path = custom_java_settings["maven_user_settings"]
-            if not os.path.exists(maven_settings_path):
+            if not os.path.exists(custom_maven_settings_path):
                 error_msg = (
-                    f"Maven settings file not found: {maven_settings_path}. "
+                    f"Provided maven settings file not found: {custom_maven_settings_path}. "
                     f"Fix: create the file, update path in ~/.serena/serena_config.yml (ls_specific_settings -> java -> maven_user_settings), "
-                    f"or remove the setting to use default (~/.m2/settings.xml)"
+                    f"or remove the setting to use default ({default_maven_settings_path})"
                 )
                 self.logger.log(error_msg, logging.ERROR)
                 raise FileNotFoundError(error_msg)
-            maven_user_settings = maven_settings_path
-            self.logger.log(f"Using Maven settings from custom location: {maven_user_settings}", logging.INFO)
-        elif os.path.exists(default_maven_settings):
-            maven_user_settings = default_maven_settings
-            self.logger.log(f"Using Maven settings from default location: {maven_user_settings}", logging.INFO)
+            maven_settings_path = custom_maven_settings_path
+            self.logger.log(f"Using Maven settings from custom location: {maven_settings_path}", logging.INFO)
+        elif os.path.exists(default_maven_settings_path):
+            maven_settings_path = default_maven_settings_path
+            self.logger.log(f"Using Maven settings from default location: {maven_settings_path}", logging.INFO)
         else:
+            maven_settings_path = None
             self.logger.log(
-                f"Maven settings not found at default location ({default_maven_settings}), will use JDTLS defaults", logging.INFO
+                f"Maven settings not found at default location ({default_maven_settings_path}), will use JDTLS defaults", logging.INFO
             )
 
         # Gradle user home: default to ~/.gradle
         default_gradle_home = os.path.join(os.path.expanduser("~"), ".gradle")
-        gradle_user_home = None
-        if "gradle_user_home" in custom_java_settings:
+        custom_gradle_home = self._custom_settings.get("gradle_user_home")
+        if custom_gradle_home is not None:
             # User explicitly provided a path
-            gradle_user_home_path = custom_java_settings["gradle_user_home"]
-            if not os.path.exists(gradle_user_home_path):
+            if not os.path.exists(custom_gradle_home):
                 error_msg = (
-                    f"Gradle user home directory not found: {gradle_user_home_path}. "
+                    f"Gradle user home directory not found: {custom_gradle_home}. "
                     f"Fix: create the directory, update path in ~/.serena/serena_config.yml (ls_specific_settings -> java -> gradle_user_home), "
                     f"or remove the setting to use default (~/.gradle)"
                 )
                 self.logger.log(error_msg, logging.ERROR)
                 raise FileNotFoundError(error_msg)
-            gradle_user_home = gradle_user_home_path
+            gradle_user_home = custom_gradle_home
             self.logger.log(f"Using Gradle user home from custom location: {gradle_user_home}", logging.INFO)
         elif os.path.exists(default_gradle_home):
             gradle_user_home = default_gradle_home
             self.logger.log(f"Using Gradle user home from default location: {gradle_user_home}", logging.INFO)
         else:
+            gradle_user_home = None
             self.logger.log(
                 f"Gradle user home not found at default location ({default_gradle_home}), will use JDTLS defaults", logging.INFO
             )
@@ -579,7 +578,7 @@ class EclipseJDTLS(SolidLanguageServer):
                             "checkProjectSettingsExclusions": False,
                             "updateBuildConfiguration": "interactive",
                             "maven": {
-                                "userSettings": maven_user_settings,
+                                "userSettings": maven_settings_path,
                                 "globalSettings": None,
                                 "notCoveredPluginExecutionSeverity": "warning",
                                 "defaultMojoExecutionAction": "ignore",

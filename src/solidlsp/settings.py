@@ -2,13 +2,18 @@
 Defines settings for Solid-LSP
 """
 
+import logging
 import os
 import pathlib
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from sensai.util.string import ToStringMixin
+
 if TYPE_CHECKING:
     from solidlsp.ls_config import Language
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -38,11 +43,31 @@ class SolidLSPSettings:
     def ls_resources_dir(self):
         return os.path.join(str(self.solidlsp_dir), "language_servers", "static")
 
-    def get_ls_specific_settings(self, language: "Language") -> dict[str, Any]:
+    class CustomLSSettings(ToStringMixin):
+        def __init__(self, settings: dict[str, Any] | None) -> None:
+            self.settings = settings or {}
+
+        def get(self, key: str, default_value: Any = None) -> Any:
+            """
+            Returns the custom setting for the given key or the default value if not set.
+            If a custom value is set for the given key, the retrieval is logged.
+
+            :param key: the key
+            :param default_value: the default value to use if no custom value is set
+            :return: the value
+            """
+            if key in self.settings:
+                value = self.settings[key]
+                log.info("Using custom LS setting %s for key '%s'", value, key)
+            else:
+                value = default_value
+            return value
+
+    def get_ls_specific_settings(self, language: "Language") -> CustomLSSettings:
         """
         Get the language server specific settings for the given language.
 
         :param language: The programming language.
         :return: A dictionary of settings for the language server.
         """
-        return self.ls_specific_settings.get(language, {})
+        return self.CustomLSSettings(self.ls_specific_settings.get(language))
