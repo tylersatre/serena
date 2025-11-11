@@ -486,7 +486,7 @@ class ProjectCommands(AutoRegisteringGroup):
                     if (i + 1) % 10 == 0:
                         ls.save_cache()
                 ls.save_cache()
-                click.echo(f"Symbols saved to {ls.cache_path}")
+                click.echo(f"Symbols saved to {ls.cache_dir}")
 
             if len(files_failed) > 0:
                 os.makedirs(os.path.dirname(log_file), exist_ok=True)
@@ -544,7 +544,7 @@ class ProjectCommands(AutoRegisteringGroup):
                     for symbol in symbols:
                         click.echo(f"  - {symbol['name']} at line {symbol['selectionRange']['start']['line']} of kind {symbol['kind']}")
                 ls.save_cache()
-                click.echo(f"Successfully indexed file '{file}', {len(symbols)} symbols saved to {ls.cache_path}.")
+                click.echo(f"Successfully indexed file '{file}', {len(symbols)} symbols saved to cache in {ls.cache_dir}.")
         finally:
             ls_mgr.stop_all()
 
