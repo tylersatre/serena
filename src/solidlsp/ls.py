@@ -968,9 +968,9 @@ class SolidLanguageServer(ABC):
                 log.debug("No cache hit for document symbols in %s", relative_file_path)
 
             # no cached result: request the root symbols from the language server
-            response = self._request_document_symbols(relative_file_path, file_data)
+            root_symbols = self._request_document_symbols(relative_file_path, file_data)
 
-            if response is None:
+            if root_symbols is None:
                 log.warning(
                     f"Received None response from the Language Server for document symbols in {relative_file_path}. "
                     f"This means the language server can't understand this file (possibly due to syntax errors). It may also be due to a bug or misconfiguration of the LS. "
@@ -978,21 +978,22 @@ class SolidLanguageServer(ABC):
                 )
                 return DocumentSymbols([])
 
-            assert isinstance(response, list), f"Unexpected response from Language Server: {response}"
-            log.debug("Received %d root symbols for %s from the language server", len(response), relative_file_path)
+            assert isinstance(root_symbols, list), f"Unexpected response from Language Server: {root_symbols}"
+            log.debug("Received %d root symbols for %s from the language server", len(root_symbols), relative_file_path)
 
-            def turn_item_into_unified_symbol(item: GenericDocumentSymbol) -> ls_types.UnifiedSymbolInformation:
+            def convert_to_unified_symbol(original_symbol_dict: GenericDocumentSymbol) -> ls_types.UnifiedSymbolInformation:
                 """
-                Ensures that the given item is augmented with location, children, and body (if requested),
-                such that it satisfies the UnifiedSymbolInformation structure.
+                Converts the given symbol dictionary to the unified representation, ensuring
+                that all required fields are present (except 'children' which is handled separately).
 
-                :param item: the item to augment
-                :return: the augmented item (same object as input, but with more attributes and cast to UnifiedSymbolInformation)
+                :param original_symbol_dict: the item to augment
+                :return: the augmented item (new object)
                 """
-                item = cast(ls_types.UnifiedSymbolInformation, item)
+                # noinspection PyInvalidCast
+                item = cast(ls_types.UnifiedSymbolInformation, dict(original_symbol_dict))
                 absolute_path = os.path.join(self.repository_root_path, relative_file_path)
 
-                # handle missing entries in location
+                # handle missing location and path entries
                 if "location" not in item:
                     uri = pathlib.Path(absolute_path).as_uri()
                     assert "range" in item
@@ -1008,46 +1009,49 @@ class SolidLanguageServer(ABC):
                     location["absolutePath"] = absolute_path
                 if "relativePath" not in location:
                     location["relativePath"] = relative_file_path
+
                 if "body" not in item:
                     item["body"] = self.retrieve_symbol_body(item, file_buffer=file_data)
+
                 # handle missing selectionRange
                 if "selectionRange" not in item:
                     if "range" in item:
                         item["selectionRange"] = item["range"]
                     else:
                         item["selectionRange"] = item["location"]["range"]
-                children = item.get(LSPConstants.CHILDREN, [])
-                for child in children:
-                    child["parent"] = item
-                item[LSPConstants.CHILDREN] = children
+
                 return item
 
-            def convert_nodes_with_common_parent(
-                nodes: list[GenericDocumentSymbol], parent: ls_types.UnifiedSymbolInformation | None
-            ) -> None:
+            def convert_symbols_with_common_parent(
+                symbols: list[GenericDocumentSymbol], parent: ls_types.UnifiedSymbolInformation | None
+            ) -> list[ls_types.UnifiedSymbolInformation]:
                 """
-                Converts the given nodes into UnifiedSymbolInformation with proper parent-child relationships,
+                Converts the given symbols into UnifiedSymbolInformation with proper parent-child relationships,
                 adding overload indices for symbols with the same name under the same parent.
                 """
                 total_name_counts = defaultdict(lambda: 0)
-                for node in nodes:
-                    total_name_counts[node["name"]] += 1
+                for symbol in symbols:
+                    total_name_counts[symbol["name"]] += 1
                 name_counts = defaultdict(lambda: 0)
-                for node in nodes:
-                    usymbol_node = turn_item_into_unified_symbol(node)
-                    if total_name_counts[usymbol_node["name"]] > 1:
-                        usymbol_node["overload_idx"] = name_counts[usymbol_node["name"]]
-                    name_counts[usymbol_node["name"]] += 1
-                    usymbol_node["parent"] = parent
-                    if usymbol_node["children"]:
-                        convert_nodes_with_common_parent(usymbol_node["children"], usymbol_node)
+                unified_symbols = []
+                for symbol in symbols:
+                    usymbol = convert_to_unified_symbol(symbol)
+                    if total_name_counts[usymbol["name"]] > 1:
+                        usymbol["overload_idx"] = name_counts[usymbol["name"]]
+                    name_counts[usymbol["name"]] += 1
+                    usymbol["parent"] = parent
+                    if "children" in usymbol:
+                        usymbol["children"] = convert_symbols_with_common_parent(usymbol["children"], usymbol)
+                    else:
+                        usymbol["children"] = []
+                    unified_symbols.append(usymbol)
+                return unified_symbols
 
-            root_nodes: list[ls_types.UnifiedSymbolInformation] = response
-            convert_nodes_with_common_parent(root_nodes, None)
-            document_symbols = DocumentSymbols(root_nodes)
+            unified_root_symbols = convert_symbols_with_common_parent(root_symbols, None)
+            document_symbols = DocumentSymbols(unified_root_symbols)
 
             # update cache
-            self.logger.log(f"Caching document symbols for {relative_file_path}", logging.DEBUG)
+            log.debug("Updating cached document symbols for %s", relative_file_path)
             self._document_symbols_cache[cache_key] = (file_data.content_hash, document_symbols)
             self._document_symbols_cache_is_modified = True
 
@@ -1708,7 +1712,9 @@ class SolidLanguageServer(ABC):
                 saved_cache = load_cache(str(cache_file), self._raw_document_symbols_cache_version())
                 if saved_cache is not None:
                     self._raw_document_symbols_cache = saved_cache
-                    self.logger.log(f"Loaded {len(self._raw_document_symbols_cache)} entries from raw document symbols cache.", logging.INFO)
+                    self.logger.log(
+                        f"Loaded {len(self._raw_document_symbols_cache)} entries from raw document symbols cache.", logging.INFO
+                    )
             except Exception as e:
                 # cache can become corrupt, so just skip loading it
                 log.warning(
