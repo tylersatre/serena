@@ -1022,8 +1022,6 @@ class SolidLanguageServer(ABC):
                 item[LSPConstants.CHILDREN] = children
                 return item
 
-            flat_all_symbol_list: list[ls_types.UnifiedSymbolInformation] = []
-
             def convert_nodes_with_common_parent(
                 nodes: list[GenericDocumentSymbol], parent: ls_types.UnifiedSymbolInformation | None
             ) -> None:
@@ -1036,7 +1034,6 @@ class SolidLanguageServer(ABC):
                     total_name_counts[node["name"]] += 1
                 name_counts = defaultdict(lambda: 0)
                 for node in nodes:
-                    flat_all_symbol_list.append(node)
                     usymbol_node = turn_item_into_unified_symbol(node)
                     if total_name_counts[usymbol_node["name"]] > 1:
                         usymbol_node["overload_idx"] = name_counts[usymbol_node["name"]]
