@@ -9,9 +9,8 @@ import pathlib
 import shutil
 import threading
 
-from solidlsp import ls_types
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import DocumentSymbols, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
@@ -194,9 +193,7 @@ class BashLanguageServer(SolidLanguageServer):
         else:
             self.logger.log("Bash server initialization complete", logging.INFO)
 
-    def request_document_symbols(
-        self, relative_file_path: str, include_body: bool = False
-    ) -> tuple[list[ls_types.UnifiedSymbolInformation], list[ls_types.UnifiedSymbolInformation]]:
+    def request_document_symbols(self, relative_file_path: str, include_body: bool = False) -> DocumentSymbols:
         """
         Request document symbols from bash-language-server via LSP.
 
@@ -212,19 +209,19 @@ class BashLanguageServer(SolidLanguageServer):
             include_body: Whether to include function bodies in symbol information
 
         Returns:
-            Tuple of (all_symbols, root_symbols) detected by the LSP server
+            The symbols
 
         """
         self.logger.log(f"Requesting document symbols via LSP for {relative_file_path}", logging.DEBUG)
 
         # Use the standard LSP approach - bash-language-server handles all function syntaxes correctly
-        all_symbols, root_symbols = super().request_document_symbols(relative_file_path, include_body)
+        document_symbols = super().request_document_symbols(relative_file_path, include_body)
 
         # Log detection results for debugging
-        functions = [s for s in all_symbols if s.get("kind") == 12]
+        functions = [s for s in document_symbols.iter_symbols() if s.get("kind") == 12]
         self.logger.log(
             f"LSP function detection for {relative_file_path}: Found {len(functions)} functions",
             logging.INFO,
         )
 
-        return all_symbols, root_symbols
+        return document_symbols

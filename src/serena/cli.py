@@ -538,7 +538,8 @@ class ProjectCommands(AutoRegisteringGroup):
         try:
             for ls in ls_mgr.iter_language_servers():
                 click.echo(f"Indexing for language {ls.language.value} …")
-                symbols, _ = ls.request_document_symbols(file, include_body=False)
+                document_symbols = ls.request_document_symbols(file, include_body=False)
+                symbols, _ = document_symbols.get_all_symbols_and_roots()
                 ls.request_document_symbols(file, include_body=True)
                 if verbose:
                     click.echo(f"Symbols in file '{file}':")

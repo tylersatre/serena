@@ -17,7 +17,7 @@ from time import sleep
 from typing import Self, Union, cast
 
 import pathspec
-from sensai.util.pickle import load_pickle
+from sensai.util.pickle import getstate, load_pickle
 
 from serena.text_utils import MatchedConsecutiveLines
 from serena.util.file_system import match_path
@@ -78,6 +78,46 @@ class LSPFileBuffer:
 
     def __post_init__(self):
         self.content_hash = hashlib.md5(self.contents.encode("utf-8")).hexdigest()
+
+
+class DocumentSymbols:
+    # IMPORTANT: Instances of this class are persisted in the high-level document symbol cache
+
+    def __init__(self, root_symbols: list[ls_types.UnifiedSymbolInformation]):
+        self.root_symbols = root_symbols
+        self._all_symbols: list[ls_types.UnifiedSymbolInformation] | None = None
+
+    def __getstate__(self):
+        return getstate(DocumentSymbols, self, transient_properties=["_all_symbols"])
+
+    def iter_symbols(self) -> Iterator[ls_types.UnifiedSymbolInformation]:
+        """
+        Iterate over all symbols in the document symbol tree.
+        Yields symbols in a depth-first manner.
+        """
+        if self._all_symbols is not None:
+            yield from self._all_symbols
+            return
+
+        def traverse(s: ls_types.UnifiedSymbolInformation):
+            yield s
+            for child in s.get("children", []):
+                yield from traverse(child)
+
+        for root_symbol in self.root_symbols:
+            yield from traverse(root_symbol)
+
+    def get_all_symbols_and_roots(self) -> tuple[list[ls_types.UnifiedSymbolInformation], list[ls_types.UnifiedSymbolInformation]]:
+        """
+        This function returns all symbols in the document as a flat list and the root symbols.
+        It exists to facilitate migration from previous versions, where this was the return interface of
+        the LS method that obtained document symbols.
+
+        :return: A tuple containing a list of all symbols in the document and a list of root symbols.
+        """
+        if self._all_symbols is None:
+            self._all_symbols = list(self.iter_symbols())
+        return self._all_symbols, self.root_symbols
 
 
 class SolidLanguageServer(ABC):
@@ -891,16 +931,14 @@ class SolidLanguageServer(ABC):
             with self.open_file(relative_file_path) as opened_file_data:
                 return get_symbols(opened_file_data)
 
-    def request_document_symbols(
-        self, relative_file_path: str, include_body: bool = False
-    ) -> tuple[list[ls_types.UnifiedSymbolInformation], list[ls_types.UnifiedSymbolInformation]]:
+    def request_document_symbols(self, relative_file_path: str, include_body: bool = False) -> DocumentSymbols:
         """
-        Retrieves the full list of symbols in the given file, along with the root symbols that represent the tree structure of the symbols.
+        Retrieves the collection of symbols in the given file
 
         :param relative_file_path: The relative path of the file that has the symbols
         :param include_body: whether to include the body of the symbols in the result.
-        :return: A list of symbols in the file, and a list of root symbols that represent the tree structure of the symbols.
-            All symbols will have a location, children, and a parent attribute,
+        :return: the collection of symbols in the file.
+            All contained symbols will have a location, children, and a parent attribute,
             where the parent attribute is None for root symbols.
             Note that this is slightly different from the call to request_full_symbol_tree,
             where the parent attribute will be the file symbol which in turn may have a package symbol as parent.
@@ -1004,8 +1042,7 @@ class SolidLanguageServer(ABC):
 
         root_nodes: list[ls_types.UnifiedSymbolInformation] = response
         convert_nodes_with_common_parent(root_nodes, None)
-
-        result = flat_all_symbol_list, root_nodes
+        result = DocumentSymbols(root_nodes)
 
         # update cache
         """
@@ -1050,7 +1087,7 @@ class SolidLanguageServer(ABC):
                     )
                     return []
                 else:
-                    _, root_nodes = self.request_document_symbols(within_relative_path, include_body=include_body)
+                    root_nodes = self.request_document_symbols(within_relative_path, include_body=include_body).root_symbols
                     return root_nodes
 
         # Helper function to recursively process directories
@@ -1109,7 +1146,8 @@ class SolidLanguageServer(ABC):
                         child["parent"] = package_symbol
 
                 elif os.path.isfile(contained_dir_or_file_abs_path):
-                    _, file_root_nodes = self.request_document_symbols(contained_dir_or_file_rel_path, include_body=include_body)
+                    document_symbols = self.request_document_symbols(contained_dir_or_file_rel_path, include_body=include_body)
+                    file_root_nodes = document_symbols.root_symbols
 
                     # Create file symbol, link with children
                     file_rel_path = str(Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path))
@@ -1218,8 +1256,7 @@ class SolidLanguageServer(ABC):
         """
         :return: the top-level symbols in the given file.
         """
-        _, document_roots = self.request_document_symbols(relative_file_path)
-        return document_roots
+        return self.request_document_symbols(relative_file_path).root_symbols
 
     def request_overview(self, within_relative_path: str) -> dict[str, list[UnifiedSymbolInformation]]:
         """
@@ -1356,8 +1393,8 @@ class SolidLanguageServer(ABC):
                     ref_text = file_data.contents.split("\n")[ref_line]
                     if "." in ref_text:
                         containing_symbol_name = ref_text.split(".")[0]
-                        all_symbols, _ = self.request_document_symbols(ref_path)
-                        for symbol in all_symbols:
+                        document_symbols = self.request_document_symbols(ref_path)
+                        for symbol in document_symbols.iter_symbols():
                             if symbol["name"] == containing_symbol_name and symbol["kind"] == ls_types.SymbolKind.Variable:
                                 containing_symbol = copy(symbol)
                                 containing_symbol["location"] = ref
@@ -1478,12 +1515,12 @@ class SolidLanguageServer(ABC):
                 )
                 return None
 
-        symbols, _ = self.request_document_symbols(relative_file_path)
+        document_symbols = self.request_document_symbols(relative_file_path)
 
         # make jedi and pyright api compatible
         # the former has no location, the later has no range
         # we will just always add location of the desired format to all symbols
-        for symbol in symbols:
+        for symbol in document_symbols.iter_symbols():
             if "location" not in symbol:
                 range = symbol["range"]
                 location = ls_types.Location(
@@ -1521,10 +1558,10 @@ class SolidLanguageServer(ABC):
         # Only consider containers that are not one-liners (otherwise we may get imports)
         candidate_containers = [
             s
-            for s in symbols
+            for s in document_symbols.iter_symbols()
             if s["kind"] in container_symbol_kinds and s["location"]["range"]["start"]["line"] != s["location"]["range"]["end"]["line"]
         ]
-        var_containers = [s for s in symbols if s["kind"] == ls_types.SymbolKind.Variable]
+        var_containers = [s for s in document_symbols.iter_symbols() if s["kind"] == ls_types.SymbolKind.Variable]
         candidate_containers.extend(var_containers)
 
         if not candidate_containers:

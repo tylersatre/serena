@@ -513,18 +513,12 @@ class LanguageServerSymbolRetriever:
                 )
         return symbols
 
-    def get_document_symbols(self, relative_path: str) -> list[LanguageServerSymbol]:
-        lang_server = self.get_language_server(relative_path)
-        symbol_dicts, _roots = lang_server.request_document_symbols(relative_path, include_body=False)
-        symbols = [LanguageServerSymbol(s) for s in symbol_dicts]
-        return symbols
-
     def find_by_location(self, location: LanguageServerSymbolLocation) -> LanguageServerSymbol | None:
         if location.relative_path is None:
             return None
         lang_server = self.get_language_server(location.relative_path)
-        symbol_dicts, _roots = lang_server.request_document_symbols(location.relative_path, include_body=False)
-        for symbol_dict in symbol_dicts:
+        document_symbols = lang_server.request_document_symbols(location.relative_path, include_body=False)
+        for symbol_dict in document_symbols.iter_symbols():
             symbol = LanguageServerSymbol(symbol_dict)
             if symbol.location == location:
                 return symbol
