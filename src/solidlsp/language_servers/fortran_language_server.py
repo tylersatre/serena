@@ -138,7 +138,7 @@ class FortranLanguageServer(SolidLanguageServer):
         return symbol
 
     @override
-    def request_document_symbols(self, relative_file_path: str, include_body: bool = False) -> DocumentSymbols:
+    def request_document_symbols(self, relative_file_path: str) -> DocumentSymbols:
         """
         Override to fix fortls's incorrect selectionRange bug.
 
@@ -153,7 +153,7 @@ class FortranLanguageServer(SolidLanguageServer):
 
         """
         # Get symbols from fortls (with incorrect selectionRange)
-        document_symbols = super().request_document_symbols(relative_file_path, include_body)
+        document_symbols = super().request_document_symbols(relative_file_path)
 
         # Get file content for parsing
         with self.open_file(relative_file_path) as file_data:

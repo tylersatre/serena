@@ -941,12 +941,11 @@ class SolidLanguageServer(ABC):
             with self.open_file(relative_file_path) as opened_file_data:
                 return get_symbols(opened_file_data)
 
-    def request_document_symbols(self, relative_file_path: str, include_body: bool = False) -> DocumentSymbols:
+    def request_document_symbols(self, relative_file_path: str) -> DocumentSymbols:
         """
         Retrieves the collection of symbols in the given file
 
         :param relative_file_path: The relative path of the file that has the symbols
-        :param include_body: whether to include the body of the symbols in the result.
         :return: the collection of symbols in the file.
             All contained symbols will have a location, children, and a parent attribute,
             where the parent attribute is None for root symbols.
@@ -1090,7 +1089,7 @@ class SolidLanguageServer(ABC):
                     )
                     return []
                 else:
-                    root_nodes = self.request_document_symbols(within_relative_path, include_body=include_body).root_symbols
+                    root_nodes = self.request_document_symbols(within_relative_path).root_symbols
                     return root_nodes
 
         # Helper function to recursively process directories
@@ -1149,7 +1148,7 @@ class SolidLanguageServer(ABC):
                         child["parent"] = package_symbol
 
                 elif os.path.isfile(contained_dir_or_file_abs_path):
-                    document_symbols = self.request_document_symbols(contained_dir_or_file_rel_path, include_body=include_body)
+                    document_symbols = self.request_document_symbols(contained_dir_or_file_rel_path)
                     file_root_nodes = document_symbols.root_symbols
 
                     # Create file symbol, link with children

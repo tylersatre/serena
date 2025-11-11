@@ -478,8 +478,7 @@ class ProjectCommands(AutoRegisteringGroup):
                 files_failed = []
                 for i, f in enumerate(tqdm(files, desc="Indexing")):
                     try:
-                        ls.request_document_symbols(f, include_body=False)
-                        ls.request_document_symbols(f, include_body=True)
+                        ls.request_document_symbols(f)
                     except Exception as e:
                         log.error(f"Failed to index {f}, continuing.")
                         collected_exceptions.append(e)
@@ -538,9 +537,8 @@ class ProjectCommands(AutoRegisteringGroup):
         try:
             for ls in ls_mgr.iter_language_servers():
                 click.echo(f"Indexing for language {ls.language.value} …")
-                document_symbols = ls.request_document_symbols(file, include_body=False)
+                document_symbols = ls.request_document_symbols(file)
                 symbols, _ = document_symbols.get_all_symbols_and_roots()
-                ls.request_document_symbols(file, include_body=True)
                 if verbose:
                     click.echo(f"Symbols in file '{file}':")
                     for symbol in symbols:

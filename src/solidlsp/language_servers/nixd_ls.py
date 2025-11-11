@@ -70,7 +70,7 @@ class NixLanguageServer(SolidLanguageServer):
         return symbol
 
     @override
-    def request_document_symbols(self, relative_file_path: str, include_body: bool = False) -> DocumentSymbols:
+    def request_document_symbols(self, relative_file_path: str) -> DocumentSymbols:
         """
         Override to extend Nix symbol ranges to include trailing semicolons.
 
@@ -78,7 +78,7 @@ class NixLanguageServer(SolidLanguageServer):
         statement-level ranges (including semicolons) for proper symbol replacement.
         """
         # Get symbols from parent implementation
-        document_symbols = super().request_document_symbols(relative_file_path, include_body)
+        document_symbols = super().request_document_symbols(relative_file_path)
 
         # Get file content for range extension
         file_content = self.language_server.retrieve_full_file_content(relative_file_path)

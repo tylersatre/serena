@@ -517,7 +517,7 @@ class LanguageServerSymbolRetriever:
         if location.relative_path is None:
             return None
         lang_server = self.get_language_server(location.relative_path)
-        document_symbols = lang_server.request_document_symbols(location.relative_path, include_body=False)
+        document_symbols = lang_server.request_document_symbols(location.relative_path)
         for symbol_dict in document_symbols.iter_symbols():
             symbol = LanguageServerSymbol(symbol_dict)
             if symbol.location == location:

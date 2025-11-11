@@ -193,7 +193,7 @@ class BashLanguageServer(SolidLanguageServer):
         else:
             self.logger.log("Bash server initialization complete", logging.INFO)
 
-    def request_document_symbols(self, relative_file_path: str, include_body: bool = False) -> DocumentSymbols:
+    def request_document_symbols(self, relative_file_path: str) -> DocumentSymbols:
         """
         Request document symbols from bash-language-server via LSP.
 
@@ -215,7 +215,7 @@ class BashLanguageServer(SolidLanguageServer):
         self.logger.log(f"Requesting document symbols via LSP for {relative_file_path}", logging.DEBUG)
 
         # Use the standard LSP approach - bash-language-server handles all function syntaxes correctly
-        document_symbols = super().request_document_symbols(relative_file_path, include_body)
+        document_symbols = super().request_document_symbols(relative_file_path)
 
         # Log detection results for debugging
         functions = [s for s in document_symbols.iter_symbols() if s.get("kind") == 12]

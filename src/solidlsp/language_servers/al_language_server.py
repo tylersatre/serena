@@ -713,7 +713,7 @@ class ALLanguageServer(SolidLanguageServer):
 
             if os.path.isfile(within_abs_path):
                 # Single file case - use parent class implementation
-                root_nodes = self.request_document_symbols(within_relative_path, include_body=include_body).root_symbols
+                root_nodes = self.request_document_symbols(within_relative_path).root_symbols
                 return root_nodes
 
             # Directory case - scan within this directory
@@ -755,7 +755,7 @@ class ALLanguageServer(SolidLanguageServer):
             try:
                 # Use our overridden request_document_symbols which handles opening
                 self.logger.log(f"AL: Getting symbols for {relative_path}", logging.DEBUG)
-                all_syms, root_syms = self.request_document_symbols(relative_path, include_body=include_body).get_all_symbols_and_roots()
+                all_syms, root_syms = self.request_document_symbols(relative_path).get_all_symbols_and_roots()
 
                 if root_syms:
                     # Create a file-level symbol containing the document symbols
