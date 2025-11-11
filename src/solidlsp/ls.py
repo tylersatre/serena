@@ -903,7 +903,7 @@ class SolidLanguageServer(ABC):
         :return: the list of root symbols in the file.
         """
 
-        def get_cached_result(cache_key: str, fd: LSPFileBuffer) -> list[GenericDocumentSymbol] | None:
+        def get_cached_raw_document_symbols(cache_key: str, fd: LSPFileBuffer) -> list[GenericDocumentSymbol] | None:
             file_hash_and_result = self._raw_document_symbols_cache.get(cache_key)
             if file_hash_and_result is not None:
                 file_hash, result = file_hash_and_result
@@ -911,15 +911,15 @@ class SolidLanguageServer(ABC):
                     log.debug("Returning cached raw document symbols for %s", relative_file_path)
                     return result
                 else:
-                    log.debug("Raw document symbol content for %s has changed. Will overwrite in-memory cache", relative_file_path)
+                    log.debug("Document content for %s has changed (raw symbol cache is not up-to-date)", relative_file_path)
             else:
                 log.debug("No cache hit for raw document symbols symbols in %s", relative_file_path)
             return None
 
-        def get_symbols(fd: LSPFileBuffer) -> list[GenericDocumentSymbol]:
+        def get_raw_document_symbols(fd: LSPFileBuffer) -> list[GenericDocumentSymbol]:
             # check for cached result
             cache_key = relative_file_path
-            response = get_cached_result(cache_key, fd)
+            response = get_cached_raw_document_symbols(cache_key, fd)
             if response is not None:
                 return response
 
@@ -936,10 +936,10 @@ class SolidLanguageServer(ABC):
             return response
 
         if file_data is not None:
-            return get_symbols(file_data)
+            return get_raw_document_symbols(file_data)
         else:
             with self.open_file(relative_file_path) as opened_file_data:
-                return get_symbols(opened_file_data)
+                return get_raw_document_symbols(opened_file_data)
 
     def request_document_symbols(self, relative_file_path: str) -> DocumentSymbols:
         """
@@ -1084,10 +1084,7 @@ class SolidLanguageServer(ABC):
                 raise FileNotFoundError(f"File or directory not found: {within_abs_path}")
             if os.path.isfile(within_abs_path):
                 if self.is_ignored_path(within_relative_path):
-                    self.logger.log(
-                        f"You passed a file explicitly, but it is ignored. This is probably an error. File: {within_relative_path}",
-                        logging.ERROR,
-                    )
+                    log.error("You passed a file explicitly, but it is ignored. This is probably an error. File: %s", within_relative_path)
                     return []
                 else:
                     root_nodes = self.request_document_symbols(within_relative_path).root_symbols
@@ -1099,7 +1096,7 @@ class SolidLanguageServer(ABC):
             abs_dir_path = os.path.realpath(abs_dir_path)
 
             if self.is_ignored_path(str(Path(abs_dir_path).relative_to(self.repository_root_path))):
-                self.logger.log(f"Skipping directory: {rel_dir_path}\n(because it should be ignored)", logging.DEBUG)
+                log.debug("Skipping directory: %s (because it should be ignored)", rel_dir_path)
                 return []
 
             result = []
@@ -1132,14 +1129,16 @@ class SolidLanguageServer(ABC):
                     )
                 except ValueError as e:
                     # Typically happens when the path is not under the repository root (e.g., symlink pointing outside)
-                    self.logger.log(
-                        f"Skipping path {contained_dir_or_file_abs_path}; likely outside of the repository root {self.repository_root_path} [cause: {e}]",
-                        logging.WARNING,
+                    log.warning(
+                        "Skipping path %s; likely outside of the repository root %s [cause: %s]",
+                        contained_dir_or_file_abs_path,
+                        self.repository_root_path,
+                        e,
                     )
                     continue
 
                 if self.is_ignored_path(contained_dir_or_file_rel_path):
-                    self.logger.log(f"Skipping item: {contained_dir_or_file_rel_path}\n(because it should be ignored)", logging.DEBUG)
+                    log.debug("Skipping item: %s (because it should be ignored)", contained_dir_or_file_rel_path)
                     continue
 
                 if os.path.isdir(contained_dir_or_file_abs_path):
