@@ -954,9 +954,9 @@ class SolidLanguageServer(ABC):
             where the parent attribute will be the file symbol which in turn may have a package symbol as parent.
             If you need a symbol tree that contains file symbols as well, you should use `request_full_symbol_tree` instead.
         """
-        # check if the desired result is cached
-        cache_key = relative_file_path
         with self.open_file(relative_file_path) as file_data:
+            # check if the desired result is cached
+            cache_key = relative_file_path
             file_hash_and_result = self._document_symbols_cache.get(cache_key)
             if file_hash_and_result is not None:
                 file_hash, document_symbols = file_hash_and_result
@@ -971,89 +971,91 @@ class SolidLanguageServer(ABC):
             # no cached result: request the root symbols from the language server
             response = self._request_document_symbols(relative_file_path, file_data)
 
-        if response is None:
-            log.warning(
-                f"Received None response from the Language Server for document symbols in {relative_file_path}. "
-                f"This means the language server can't understand this file (possibly due to syntax errors). It may also be due to a bug or misconfiguration of the LS. "
-                f"Returning empty list",
-            )
-            return DocumentSymbols([])
-
-        assert isinstance(response, list), f"Unexpected response from Language Server: {response}"
-        log.debug("Received %d root symbols for %s from the language server", len(response), relative_file_path)
-
-        def turn_item_into_unified_symbol(item: GenericDocumentSymbol) -> ls_types.UnifiedSymbolInformation:
-            """
-            Ensures that the given item is augmented with location, children, and body (if requested),
-            such that it satisfies the UnifiedSymbolInformation structure.
-
-            :param item: the item to augment
-            :return: the augmented item (same object as input, but with more attributes and cast to UnifiedSymbolInformation)
-            """
-            item = cast(ls_types.UnifiedSymbolInformation, item)
-            absolute_path = os.path.join(self.repository_root_path, relative_file_path)
-
-            # handle missing entries in location
-            if "location" not in item:
-                uri = pathlib.Path(absolute_path).as_uri()
-                assert "range" in item
-                tree_location = ls_types.Location(
-                    uri=uri,
-                    range=item["range"],
-                    absolutePath=absolute_path,
-                    relativePath=relative_file_path,
+            if response is None:
+                log.warning(
+                    f"Received None response from the Language Server for document symbols in {relative_file_path}. "
+                    f"This means the language server can't understand this file (possibly due to syntax errors). It may also be due to a bug or misconfiguration of the LS. "
+                    f"Returning empty list",
                 )
-                item["location"] = tree_location
-            location = item["location"]
-            if "absolutePath" not in location:
-                location["absolutePath"] = absolute_path
-            if "relativePath" not in location:
-                location["relativePath"] = relative_file_path
-            if "body" not in item:
-                item["body"] = self.retrieve_symbol_body(item)
-            # handle missing selectionRange
-            if "selectionRange" not in item:
-                if "range" in item:
-                    item["selectionRange"] = item["range"]
-                else:
-                    item["selectionRange"] = item["location"]["range"]
-            children = item.get(LSPConstants.CHILDREN, [])
-            for child in children:
-                child["parent"] = item
-            item[LSPConstants.CHILDREN] = children
-            return item
+                return DocumentSymbols([])
 
-        flat_all_symbol_list: list[ls_types.UnifiedSymbolInformation] = []
+            assert isinstance(response, list), f"Unexpected response from Language Server: {response}"
+            log.debug("Received %d root symbols for %s from the language server", len(response), relative_file_path)
 
-        def convert_nodes_with_common_parent(nodes: list[GenericDocumentSymbol], parent: ls_types.UnifiedSymbolInformation | None) -> None:
-            """
-            Converts the given nodes into UnifiedSymbolInformation with proper parent-child relationships,
-            adding overload indices for symbols with the same name under the same parent.
-            """
-            total_name_counts = defaultdict(lambda: 0)
-            for node in nodes:
-                total_name_counts[node["name"]] += 1
-            name_counts = defaultdict(lambda: 0)
-            for node in nodes:
-                flat_all_symbol_list.append(node)
-                usymbol_node = turn_item_into_unified_symbol(node)
-                if total_name_counts[usymbol_node["name"]] > 1:
-                    usymbol_node["overload_idx"] = name_counts[usymbol_node["name"]]
-                name_counts[usymbol_node["name"]] += 1
-                usymbol_node["parent"] = parent
-                if usymbol_node["children"]:
-                    convert_nodes_with_common_parent(usymbol_node["children"], usymbol_node)
+            def turn_item_into_unified_symbol(item: GenericDocumentSymbol) -> ls_types.UnifiedSymbolInformation:
+                """
+                Ensures that the given item is augmented with location, children, and body (if requested),
+                such that it satisfies the UnifiedSymbolInformation structure.
 
-        root_nodes: list[ls_types.UnifiedSymbolInformation] = response
-        convert_nodes_with_common_parent(root_nodes, None)
-        document_symbols = DocumentSymbols(root_nodes)
+                :param item: the item to augment
+                :return: the augmented item (same object as input, but with more attributes and cast to UnifiedSymbolInformation)
+                """
+                item = cast(ls_types.UnifiedSymbolInformation, item)
+                absolute_path = os.path.join(self.repository_root_path, relative_file_path)
 
-        # update cache
-        self.logger.log(f"Caching document symbols for {relative_file_path}", logging.DEBUG)
-        self._document_symbols_cache[cache_key] = (file_data.content_hash, document_symbols)
-        self._document_symbols_cache_is_modified = True
+                # handle missing entries in location
+                if "location" not in item:
+                    uri = pathlib.Path(absolute_path).as_uri()
+                    assert "range" in item
+                    tree_location = ls_types.Location(
+                        uri=uri,
+                        range=item["range"],
+                        absolutePath=absolute_path,
+                        relativePath=relative_file_path,
+                    )
+                    item["location"] = tree_location
+                location = item["location"]
+                if "absolutePath" not in location:
+                    location["absolutePath"] = absolute_path
+                if "relativePath" not in location:
+                    location["relativePath"] = relative_file_path
+                if "body" not in item:
+                    item["body"] = self.retrieve_symbol_body(item, file_buffer=file_data)
+                # handle missing selectionRange
+                if "selectionRange" not in item:
+                    if "range" in item:
+                        item["selectionRange"] = item["range"]
+                    else:
+                        item["selectionRange"] = item["location"]["range"]
+                children = item.get(LSPConstants.CHILDREN, [])
+                for child in children:
+                    child["parent"] = item
+                item[LSPConstants.CHILDREN] = children
+                return item
 
-        return document_symbols
+            flat_all_symbol_list: list[ls_types.UnifiedSymbolInformation] = []
+
+            def convert_nodes_with_common_parent(
+                nodes: list[GenericDocumentSymbol], parent: ls_types.UnifiedSymbolInformation | None
+            ) -> None:
+                """
+                Converts the given nodes into UnifiedSymbolInformation with proper parent-child relationships,
+                adding overload indices for symbols with the same name under the same parent.
+                """
+                total_name_counts = defaultdict(lambda: 0)
+                for node in nodes:
+                    total_name_counts[node["name"]] += 1
+                name_counts = defaultdict(lambda: 0)
+                for node in nodes:
+                    flat_all_symbol_list.append(node)
+                    usymbol_node = turn_item_into_unified_symbol(node)
+                    if total_name_counts[usymbol_node["name"]] > 1:
+                        usymbol_node["overload_idx"] = name_counts[usymbol_node["name"]]
+                    name_counts[usymbol_node["name"]] += 1
+                    usymbol_node["parent"] = parent
+                    if usymbol_node["children"]:
+                        convert_nodes_with_common_parent(usymbol_node["children"], usymbol_node)
+
+            root_nodes: list[ls_types.UnifiedSymbolInformation] = response
+            convert_nodes_with_common_parent(root_nodes, None)
+            document_symbols = DocumentSymbols(root_nodes)
+
+            # update cache
+            self.logger.log(f"Caching document symbols for {relative_file_path}", logging.DEBUG)
+            self._document_symbols_cache[cache_key] = (file_data.content_hash, document_symbols)
+            self._document_symbols_cache_is_modified = True
+
+            return document_symbols
 
     def request_full_symbol_tree(
         self, within_relative_path: str | None = None, include_body: bool = False
@@ -1305,7 +1307,11 @@ class SolidLanguageServer(ABC):
 
         return ls_types.Hover(**response)
 
-    def retrieve_symbol_body(self, symbol: ls_types.UnifiedSymbolInformation | LSPTypes.DocumentSymbol | LSPTypes.SymbolInformation) -> str:
+    def retrieve_symbol_body(
+        self,
+        symbol: ls_types.UnifiedSymbolInformation | LSPTypes.DocumentSymbol | LSPTypes.SymbolInformation,
+        file_buffer: LSPFileBuffer | None = None,
+    ) -> str:
         """
         Load the body of the given symbol. If the body is already contained in the symbol, just return it.
         """
@@ -1317,9 +1323,11 @@ class SolidLanguageServer(ABC):
         symbol_start_line = symbol["location"]["range"]["start"]["line"]
         symbol_end_line = symbol["location"]["range"]["end"]["line"]
         assert "relativePath" in symbol["location"]
-        # TODO fixme: duplicate read
-        symbol_file = self.retrieve_full_file_content(symbol["location"]["relativePath"])
-        symbol_lines = symbol_file.split("\n")
+        if file_buffer is not None:
+            symbol_file_content = file_buffer.contents
+        else:
+            symbol_file_content = self.retrieve_full_file_content(symbol["location"]["relativePath"])
+        symbol_lines = symbol_file_content.split("\n")
         symbol_body = "\n".join(symbol_lines[symbol_start_line : symbol_end_line + 1])
 
         # remove leading indentation
