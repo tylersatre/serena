@@ -16,7 +16,7 @@ from pathlib import Path
 from overrides import override
 
 from solidlsp import ls_types
-from solidlsp.ls import DocumentSymbols, SolidLanguageServer
+from solidlsp.ls import DocumentSymbols, LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
@@ -70,15 +70,13 @@ class NixLanguageServer(SolidLanguageServer):
         return symbol
 
     @override
-    def request_document_symbols(self, relative_file_path: str) -> DocumentSymbols:
-        """
-        Override to extend Nix symbol ranges to include trailing semicolons.
+    def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
+        # Override to extend Nix symbol ranges to include trailing semicolons.
+        # nixd provides expression-level ranges (excluding semicolons) but serena needs
+        # statement-level ranges (including semicolons) for proper symbol replacement.
 
-        nixd provides expression-level ranges (excluding semicolons) but serena needs
-        statement-level ranges (including semicolons) for proper symbol replacement.
-        """
         # Get symbols from parent implementation
-        document_symbols = super().request_document_symbols(relative_file_path)
+        document_symbols = super().request_document_symbols(relative_file_path, file_buffer=file_buffer)
 
         # Get file content for range extension
         file_content = self.language_server.retrieve_full_file_content(relative_file_path)

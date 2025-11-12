@@ -484,6 +484,20 @@ class SolidLanguageServer(ABC):
             )
             del self.open_file_buffers[uri]
 
+    @contextmanager
+    def _open_file_context(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> Iterator[LSPFileBuffer]:
+        """
+        Internal context manager to open a file, optionally reusing an existing file buffer.
+
+        :param relative_file_path: the relative path of the file to open.
+        :param file_buffer: an optional existing file buffer to reuse.
+        """
+        if file_buffer is not None:
+            yield file_buffer
+        else:
+            with self.open_file(relative_file_path) as fb:
+                yield fb
+
     def insert_text_at_position(self, relative_file_path: str, line: int, column: int, text_to_be_inserted: str) -> ls_types.Position:
         """
         Insert text at the given line and column in the given file and return
@@ -941,11 +955,12 @@ class SolidLanguageServer(ABC):
             with self.open_file(relative_file_path) as opened_file_data:
                 return get_raw_document_symbols(opened_file_data)
 
-    def request_document_symbols(self, relative_file_path: str) -> DocumentSymbols:
+    def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
         """
         Retrieves the collection of symbols in the given file
 
         :param relative_file_path: The relative path of the file that has the symbols
+        :param file_buffer: an optional file buffer if the file is already opened.
         :return: the collection of symbols in the file.
             All contained symbols will have a location, children, and a parent attribute,
             where the parent attribute is None for root symbols.
@@ -953,7 +968,7 @@ class SolidLanguageServer(ABC):
             where the parent attribute will be the file symbol which in turn may have a package symbol as parent.
             If you need a symbol tree that contains file symbols as well, you should use `request_full_symbol_tree` instead.
         """
-        with self.open_file(relative_file_path) as file_data:
+        with self._open_file_context(relative_file_path, file_buffer) as file_data:
             # check if the desired result is cached
             cache_key = relative_file_path
             file_hash_and_result = self._document_symbols_cache.get(cache_key)
@@ -1148,29 +1163,28 @@ class SolidLanguageServer(ABC):
                         child["parent"] = package_symbol
 
                 elif os.path.isfile(contained_dir_or_file_abs_path):
-                    document_symbols = self.request_document_symbols(contained_dir_or_file_rel_path)
-                    file_root_nodes = document_symbols.root_symbols
+                    with self._open_file_context(contained_dir_or_file_rel_path) as file_data:
+                        document_symbols = self.request_document_symbols(contained_dir_or_file_rel_path, file_data)
+                        file_root_nodes = document_symbols.root_symbols
 
-                    # Create file symbol, link with children
-                    file_rel_path = str(Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path))
-                    with self.open_file(file_rel_path) as file_data:
-                        fileRange = self._get_range_from_file_content(file_data.contents)
-                    file_symbol = ls_types.UnifiedSymbolInformation(  # type: ignore
-                        name=os.path.splitext(contained_dir_or_file_name)[0],
-                        kind=ls_types.SymbolKind.File,
-                        range=fileRange,
-                        selectionRange=fileRange,
-                        location=ls_types.Location(
-                            uri=str(pathlib.Path(contained_dir_or_file_abs_path).as_uri()),
-                            range=fileRange,
-                            absolutePath=str(contained_dir_or_file_abs_path),
-                            relativePath=str(Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path)),
-                        ),
-                        children=file_root_nodes,
-                        parent=package_symbol,
-                    )
-                    for child in file_root_nodes:
-                        child["parent"] = file_symbol
+                        # Create file symbol, link with children
+                        file_range = self._get_range_from_file_content(file_data.contents)
+                        file_symbol = ls_types.UnifiedSymbolInformation(  # type: ignore
+                            name=os.path.splitext(contained_dir_or_file_name)[0],
+                            kind=ls_types.SymbolKind.File,
+                            range=file_range,
+                            selectionRange=file_range,
+                            location=ls_types.Location(
+                                uri=str(pathlib.Path(contained_dir_or_file_abs_path).as_uri()),
+                                range=file_range,
+                                absolutePath=str(contained_dir_or_file_abs_path),
+                                relativePath=str(Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path)),
+                            ),
+                            children=file_root_nodes,
+                            parent=package_symbol,
+                        )
+                        for child in file_root_nodes:
+                            child["parent"] = file_symbol
 
                     # Link file symbol with package
                     package_symbol["children"].append(file_symbol)

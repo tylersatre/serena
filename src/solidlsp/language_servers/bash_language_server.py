@@ -10,7 +10,7 @@ import shutil
 import threading
 
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
-from solidlsp.ls import DocumentSymbols, SolidLanguageServer
+from solidlsp.ls import DocumentSymbols, LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
@@ -193,29 +193,18 @@ class BashLanguageServer(SolidLanguageServer):
         else:
             self.logger.log("Bash server initialization complete", logging.INFO)
 
-    def request_document_symbols(self, relative_file_path: str) -> DocumentSymbols:
-        """
-        Request document symbols from bash-language-server via LSP.
+    def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
+        # Uses the standard LSP documentSymbol request which provides reliable function detection
+        # for all bash function syntaxes including:
+        # - function name() { ... } (with function keyword)
+        # - name() { ... } (traditional syntax)
+        # - Functions with various indentation levels
+        # - Functions with comments before/after/inside
 
-        Uses the standard LSP documentSymbol request which provides reliable function detection
-        for all bash function syntaxes including:
-        - function name() { ... } (with function keyword)
-        - name() { ... } (traditional syntax)
-        - Functions with various indentation levels
-        - Functions with comments before/after/inside
-
-        Args:
-            relative_file_path: Path to the bash file relative to repository root
-            include_body: Whether to include function bodies in symbol information
-
-        Returns:
-            The symbols
-
-        """
         self.logger.log(f"Requesting document symbols via LSP for {relative_file_path}", logging.DEBUG)
 
         # Use the standard LSP approach - bash-language-server handles all function syntaxes correctly
-        document_symbols = super().request_document_symbols(relative_file_path)
+        document_symbols = super().request_document_symbols(relative_file_path, file_buffer=file_buffer)
 
         # Log detection results for debugging
         functions = [s for s in document_symbols.iter_symbols() if s.get("kind") == 12]
