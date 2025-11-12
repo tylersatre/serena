@@ -79,6 +79,10 @@ class LSPFileBuffer:
     def __post_init__(self):
         self.content_hash = hashlib.md5(self.contents.encode("utf-8")).hexdigest()
 
+    def split_lines(self) -> list[str]:
+        """Splits the contents of the file into lines."""
+        return self.contents.split("\n")
+
 
 class DocumentSymbols:
     # IMPORTANT: Instances of this class are persisted in the high-level document symbol cache
@@ -996,6 +1000,8 @@ class SolidLanguageServer(ABC):
             assert isinstance(root_symbols, list), f"Unexpected response from Language Server: {root_symbols}"
             log.debug("Received %d root symbols for %s from the language server", len(root_symbols), relative_file_path)
 
+            file_lines = file_data.split_lines()
+
             def convert_to_unified_symbol(original_symbol_dict: GenericDocumentSymbol) -> ls_types.UnifiedSymbolInformation:
                 """
                 Converts the given symbol dictionary to the unified representation, ensuring
@@ -1026,7 +1032,7 @@ class SolidLanguageServer(ABC):
                     location["relativePath"] = relative_file_path
 
                 if "body" not in item:
-                    item["body"] = self.retrieve_symbol_body(item, file_buffer=file_data)
+                    item["body"] = self.retrieve_symbol_body(item, file_lines=file_lines)
 
                 # handle missing selectionRange
                 if "selectionRange" not in item:
@@ -1323,6 +1329,7 @@ class SolidLanguageServer(ABC):
     def retrieve_symbol_body(
         self,
         symbol: ls_types.UnifiedSymbolInformation | LSPTypes.DocumentSymbol | LSPTypes.SymbolInformation,
+        file_lines: list[str] | None = None,
         file_buffer: LSPFileBuffer | None = None,
     ) -> str:
         """
@@ -1336,12 +1343,10 @@ class SolidLanguageServer(ABC):
         symbol_start_line = symbol["location"]["range"]["start"]["line"]
         symbol_end_line = symbol["location"]["range"]["end"]["line"]
         assert "relativePath" in symbol["location"]
-        if file_buffer is not None:
-            symbol_file_content = file_buffer.contents
-        else:
-            symbol_file_content = self.retrieve_full_file_content(symbol["location"]["relativePath"])
-        symbol_lines = symbol_file_content.split("\n")
-        symbol_body = "\n".join(symbol_lines[symbol_start_line : symbol_end_line + 1])
+        if file_lines is None:
+            with self._open_file_context(symbol["location"]["relativePath"], file_buffer) as f:
+                file_lines = f.split_lines()
+        symbol_body = "\n".join(file_lines[symbol_start_line : symbol_end_line + 1])
 
         # remove leading indentation
         symbol_start_column = symbol["location"]["range"]["start"]["character"]
