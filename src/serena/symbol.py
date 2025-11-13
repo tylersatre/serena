@@ -491,7 +491,6 @@ class LanguageServerSymbolRetriever:
     def find_by_name(
         self,
         name_path: str,
-        include_body: bool = False,
         include_kinds: Sequence[SymbolKind] | None = None,
         exclude_kinds: Sequence[SymbolKind] | None = None,
         substring_matching: bool = False,
@@ -504,7 +503,7 @@ class LanguageServerSymbolRetriever:
         """
         symbols: list[LanguageServerSymbol] = []
         for lang_server in self._ls_manager.iter_language_servers():
-            symbol_roots = lang_server.request_full_symbol_tree(within_relative_path=within_relative_path, include_body=include_body)
+            symbol_roots = lang_server.request_full_symbol_tree(within_relative_path=within_relative_path)
             for root in symbol_roots:
                 symbols.extend(
                     LanguageServerSymbol(root).find(

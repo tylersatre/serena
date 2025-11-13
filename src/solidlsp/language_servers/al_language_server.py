@@ -680,7 +680,7 @@ class ALLanguageServer(SolidLanguageServer):
         return super().is_ignored_dirname(dirname) or dirname in al_ignore_dirs
 
     @override
-    def request_full_symbol_tree(self, within_relative_path: str | None = None, include_body: bool = False) -> list[dict]:
+    def request_full_symbol_tree(self, within_relative_path: str | None = None) -> list[dict]:
         """
         Override to handle AL's requirement of opening files before requesting symbols.
 

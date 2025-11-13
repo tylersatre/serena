@@ -1081,9 +1081,7 @@ class SolidLanguageServer(ABC):
 
             return document_symbols
 
-    def request_full_symbol_tree(
-        self, within_relative_path: str | None = None, include_body: bool = False
-    ) -> list[ls_types.UnifiedSymbolInformation]:
+    def request_full_symbol_tree(self, within_relative_path: str | None = None) -> list[ls_types.UnifiedSymbolInformation]:
         """
         Will go through all files in the project or within a relative path and build a tree of symbols.
         Note: this may be slow the first time it is called, especially if `within_relative_path` is not used to restrict the search.
@@ -1098,8 +1096,6 @@ class SolidLanguageServer(ABC):
         :param within_relative_path: pass a relative path to only consider symbols within this path.
             If a file is passed, only the symbols within this file will be considered.
             If a directory is passed, all files within this directory will be considered.
-        :param include_body: whether to include the body of the symbols in the result.
-
         :return: A list of root symbols representing the top-level packages/modules in the project.
         """
         if within_relative_path is not None:
