@@ -133,7 +133,10 @@ class SolidLanguageServer(ABC):
     CACHE_FOLDER_NAME = "cache"
     RAW_DOCUMENT_SYMBOLS_CACHE_VERSION = 1
     """
-    global version identifier for raw symbol caches; an LS-specific version is defined separately and combined with this
+    global version identifier for raw symbol caches; an LS-specific version is defined separately and combined with this.
+    This should be incremented whenever there is a change in the way raw document symbols are stored.
+    If the result of a language server changes in a way that affects the raw document symbols,
+    the LS-specific version should be incremented instead.
     """
     RAW_DOCUMENT_SYMBOL_CACHE_FILENAME = "raw_document_symbols.pkl"
     RAW_DOCUMENT_SYMBOL_CACHE_FILENAME_LEGACY_FALLBACK = "document_symbols_cache_v23-06-25.pkl"
