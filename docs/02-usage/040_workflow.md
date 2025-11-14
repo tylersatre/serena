@@ -12,6 +12,7 @@ setting up a project with Serena typically involves the following steps:
 3. **Onboarding**: Getting Serena familiar with the project (creating memories)
 4. **Working on coding tasks**: Using Serena to help you with actual coding tasks in the project
 
+(project-creation-indexing)=
 ## Project Creation & Indexing
 
 You can create a project either  
