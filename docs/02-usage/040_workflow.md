@@ -60,7 +60,10 @@ You can either choose to do this
       * "Activate the project /path/to/my_project" (for first-time activation with auto-creation)
       * "Activate the project my_project"
    
-   Note that this option requires the `activate_project` tool to be active (which it isn't in context `ide-assistant` where t.        
+   Note that this option requires the `activate_project` tool to be active, 
+   which it isn't in the (default version) of context `ide-assistant` if a project is provided at startup.
+   (The tool is deactivated because we assume that in the ide-assistant context the user will only work on the open project and have
+   no need to switch it.)
 
  * when the MCP server starts, by passing the project path or name as a command-line argument
    (e.g. when working on a fixed project in `ide-assistant` mode): `--project <path|name>`
