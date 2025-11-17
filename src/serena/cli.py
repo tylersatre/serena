@@ -1,3 +1,4 @@
+import collections
 import glob
 import json
 import os
@@ -11,6 +12,7 @@ from typing import Any, Literal
 import click
 from sensai.util import logging
 from sensai.util.logging import FileLoggerContext, datetime_tag
+from sensai.util.string import dict_string
 from tqdm import tqdm
 
 from serena.agent import SerenaAgent
@@ -531,17 +533,21 @@ class ProjectCommands(AutoRegisteringGroup):
 
             collected_exceptions: list[Exception] = []
             files_failed = []
+            language_file_counts = collections.defaultdict(lambda: 0)
             for i, f in enumerate(tqdm(files, desc="Indexing")):
                 try:
                     ls = ls_mgr.get_language_server(f)
                     ls.request_document_symbols(f, include_body=False)
                     ls.request_document_symbols(f, include_body=True)
+                    language_file_counts[ls.language] += 1
                 except Exception as e:
                     log.error(f"Failed to index {f}, continuing.")
                     collected_exceptions.append(e)
                     files_failed.append(f)
                 if (i + 1) % 10 == 0:
                     ls_mgr.save_all_caches()
+            language_file_counts = {k.value: v for k, v in language_file_counts.items()}
+            click.echo(f"Indexed files per language: {dict_string(language_file_counts, brackets=None)}")
             ls_mgr.save_all_caches()
 
             if len(files_failed) > 0:
