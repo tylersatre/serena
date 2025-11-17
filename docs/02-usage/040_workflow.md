@@ -12,6 +12,7 @@ setting up a project with Serena typically involves the following steps:
 3. **Onboarding**: Getting Serena familiar with the project (creating memories)
 4. **Working on coding tasks**: Using Serena to help you with actual coding tasks in the project
 
+(project-creation-indexing)=
 ## Project Creation & Indexing
 
 You can create a project either  
@@ -22,17 +23,19 @@ You can create a project either
 
 To explicitly create a project, use the following command while in the project directory:
 
-    <serena> project generate-yml [options]
+    <serena> project create [options]
 
 For instance, when using `uvx`, run
 
-    uvx --from git+https://github.com/oraios/serena serena project generate-yml [options]
+    uvx --from git+https://github.com/oraios/serena serena project create [options]
 
  * For an empty project, you will need to specify the programming language
    (e.g., `--language python`). 
  * For an existing project, the main programming language will be detected automatically,
    but you can choose to explicitly specify multiple languages by passing the `--language` parameter
    multiple times (e.g. `--language python --language typescript`).
+ * You can optionally specify a custom project name with `--name "My Project"`.
+ * You can immediately index the project after creation with `--index`.
 
 After creation, you can adjust the project settings in the generated `.serena/project.yml` file.
 
@@ -57,7 +60,10 @@ You can either choose to do this
       * "Activate the project /path/to/my_project" (for first-time activation with auto-creation)
       * "Activate the project my_project"
    
-   Note that this option requires the `activate_project` tool to be active (which it isn't in context `ide-assistant` where t.        
+   Note that this option requires the `activate_project` tool to be active, 
+   which it isn't in the (default version) of context `ide-assistant` if a project is provided at startup.
+   (The tool is deactivated because we assume that in the ide-assistant context the user will only work on the open project and have
+   no need to switch it.)
 
  * when the MCP server starts, by passing the project path or name as a command-line argument
    (e.g. when working on a fixed project in `ide-assistant` mode): `--project <path|name>`
