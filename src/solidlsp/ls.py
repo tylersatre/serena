@@ -1717,9 +1717,12 @@ class SolidLanguageServer(ABC):
                             num_symbols_migrated += len(all_symbols)
                     log.info("Migrated %d document symbols from legacy cache", num_symbols_migrated)
                     self._raw_document_symbols_cache = migrated_cache
+                    self._raw_document_symbols_cache_is_modified = True
+                    self._save_raw_document_symbols_cache()
+                    legacy_cache_file.unlink()
                     return
                 except Exception as e:
-                    log.error("Failed to migrate cache: %s", e)
+                    log.error("Error during cache migration: %s", e)
                     return
 
         # load existing cache (if any)
