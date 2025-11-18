@@ -533,7 +533,7 @@ class ProjectCommands(AutoRegisteringGroup):
 
             collected_exceptions: list[Exception] = []
             files_failed = []
-            language_file_counts = collections.defaultdict(lambda: 0)
+            language_file_counts: dict[Language, int] = collections.defaultdict(lambda: 0)
             for i, f in enumerate(tqdm(files, desc="Indexing")):
                 try:
                     ls = ls_mgr.get_language_server(f)
@@ -546,8 +546,8 @@ class ProjectCommands(AutoRegisteringGroup):
                     files_failed.append(f)
                 if (i + 1) % 10 == 0:
                     ls_mgr.save_all_caches()
-            language_file_counts = {k.value: v for k, v in language_file_counts.items()}
-            click.echo(f"Indexed files per language: {dict_string(language_file_counts, brackets=None)}")
+            reported_language_file_counts = {k.value: v for k, v in language_file_counts.items()}
+            click.echo(f"Indexed files per language: {dict_string(reported_language_file_counts, brackets=None)}")
             ls_mgr.save_all_caches()
 
             if len(files_failed) > 0:
