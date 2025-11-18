@@ -17,7 +17,7 @@ from sensai.util.logging import LogTime
 from interprompt.jinja_template import JinjaTemplate
 from serena import serena_version
 from serena.analytics import RegisteredTokenCountEstimator, ToolUsageStats
-from serena.config.context_mode import RegisteredContext, SerenaAgentContext, SerenaAgentMode
+from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
 from serena.config.serena_config import SerenaConfig, ToolInclusionDefinition, ToolSet
 from serena.dashboard import SerenaDashboardAPI
 from serena.ls_manager import LanguageServerManager
@@ -141,8 +141,8 @@ class SerenaAgent:
         # determine the base toolset defining the set of exposed tools (which e.g. the MCP shall see),
         # limited by the Serena config, the context (which is fixed for the session) and JetBrains mode
         tool_inclusion_definitions: list[ToolInclusionDefinition] = [self.serena_config, self._context]
-        if self._context.name == RegisteredContext.IDE_ASSISTANT.value:
-            tool_inclusion_definitions.extend(self._ide_assistant_context_tool_inclusion_definitions(project))
+        if self._context.single_project:
+            tool_inclusion_definitions.extend(self._single_project_context_tool_inclusion_definitions(project))
         if self.serena_config.jetbrains:
             tool_inclusion_definitions.append(SerenaAgentMode.from_name_internal("jetbrains"))
 
@@ -240,7 +240,7 @@ class SerenaAgent:
                 os.environ["COMSPEC"] = ""  # force use of default shell
                 log.info("Adjusting COMSPEC environment variable to use the default shell instead of '%s'", comspec)
 
-    def _ide_assistant_context_tool_inclusion_definitions(self, project_root_or_name: str | None) -> list[ToolInclusionDefinition]:
+    def _single_project_context_tool_inclusion_definitions(self, project_root_or_name: str | None) -> list[ToolInclusionDefinition]:
         """
         In the IDE assistant context, the agent is assumed to work on a single project, and we thus
         want to apply that project's tool exclusions/inclusions from the get-go, limiting the set
@@ -258,6 +258,9 @@ class SerenaAgent:
             #   and provide responses to the client immediately.
             project = self.load_project_from_path_or_name(project_root_or_name, autogenerate=False)
             if project is not None:
+                log.info(
+                    "Applying tool inclusion/exclusion definitions for single-project context based on project '%s'", project.project_name
+                )
                 tool_inclusion_definitions.append(
                     ToolInclusionDefinition(
                         excluded_tools=[ActivateProjectTool.get_name_from_cls(), GetCurrentConfigTool.get_name_from_cls()]
