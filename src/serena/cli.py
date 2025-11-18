@@ -537,8 +537,7 @@ class ProjectCommands(AutoRegisteringGroup):
             for i, f in enumerate(tqdm(files, desc="Indexing")):
                 try:
                     ls = ls_mgr.get_language_server(f)
-                    ls.request_document_symbols(f, include_body=False)
-                    ls.request_document_symbols(f, include_body=True)
+                    ls.request_document_symbols(f)
                     language_file_counts[ls.language] += 1
                 except Exception as e:
                     log.error(f"Failed to index {f}, continuing.")
@@ -599,14 +598,14 @@ class ProjectCommands(AutoRegisteringGroup):
         try:
             for ls in ls_mgr.iter_language_servers():
                 click.echo(f"Indexing for language {ls.language.value} …")
-                symbols, _ = ls.request_document_symbols(file, include_body=False)
-                ls.request_document_symbols(file, include_body=True)
+                document_symbols = ls.request_document_symbols(file)
+                symbols, _ = document_symbols.get_all_symbols_and_roots()
                 if verbose:
                     click.echo(f"Symbols in file '{file}':")
                     for symbol in symbols:
                         click.echo(f"  - {symbol['name']} at line {symbol['selectionRange']['start']['line']} of kind {symbol['kind']}")
                 ls.save_cache()
-                click.echo(f"Successfully indexed file '{file}', {len(symbols)} symbols saved to {ls.cache_path}.")
+                click.echo(f"Successfully indexed file '{file}', {len(symbols)} symbols saved to cache in {ls.cache_dir}.")
         finally:
             ls_mgr.stop_all()
 
