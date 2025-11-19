@@ -362,3 +362,6 @@ jobs:
       - name: Test with pytest
         shell: bash
         run: uv run poe test
+      - name: Type-checking with mypy
+        shell: bash
+        run: uv run poe type-check
