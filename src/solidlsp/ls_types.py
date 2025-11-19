@@ -9,6 +9,8 @@ from typing import NotRequired, Union
 
 from typing_extensions import TypedDict
 
+from solidlsp.lsp_protocol_handler.lsp_types import DiagnosticSeverity
+
 URI = str
 DocumentUri = str
 Uint = int
@@ -327,13 +329,6 @@ class Hover(TypedDict):
     visualize the hover, e.g. by changing the background color. """
 
 
-class DiagnosticsSeverity(IntEnum):
-    ERROR = 1
-    WARNING = 2
-    INFORMATION = 3
-    HINT = 4
-
-
 class TextDocumentIdentifier(TypedDict):
     """A literal to identify a text document in the client."""
 
@@ -377,7 +372,7 @@ class Diagnostic(TypedDict):
     """ The URI of the text document to which the diagnostics apply. """
     range: Range
     """ The range of the text document to which the diagnostics apply. """
-    severity: NotRequired[DiagnosticsSeverity]
+    severity: NotRequired[DiagnosticSeverity]
     """ The severity of the diagnostic. """
     message: str
     """ The diagnostic message. """
