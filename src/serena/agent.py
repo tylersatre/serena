@@ -18,13 +18,13 @@ from interprompt.jinja_template import JinjaTemplate
 from serena import serena_version
 from serena.analytics import RegisteredTokenCountEstimator, ToolUsageStats
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
-from serena.config.serena_config import SerenaConfig, ToolInclusionDefinition, ToolSet
+from serena.config.serena_config import SerenaConfig, ToolInclusionDefinition
 from serena.dashboard import SerenaDashboardAPI
 from serena.ls_manager import LanguageServerManager
 from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
 from serena.task_executor import TaskExecutor
-from serena.tools import ActivateProjectTool, GetCurrentConfigTool, Tool, ToolMarker, ToolRegistry
+from serena.tools import ActivateProjectTool, GetCurrentConfigTool, ReplaceContentTool, Tool, ToolMarker, ToolRegistry
 from serena.util.inspection import iter_subclasses
 from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import Language
@@ -43,6 +43,10 @@ class ProjectNotFoundError(Exception):
 
 
 class AvailableTools:
+    """
+    Represents the set of available/exposed tools of a SerenaAgent.
+    """
+
     def __init__(self, tools: list[Tool]):
         """
         :param tools: the list of available tools
@@ -57,6 +61,94 @@ class AvailableTools:
 
     def __len__(self) -> int:
         return len(self.tools)
+
+
+class ToolSet:
+    """
+    Represents a set of tools by their names.
+    """
+
+    LEGACY_TOOL_NAME_MAPPING = {"replace_regex": ReplaceContentTool.get_name_from_cls()}
+    """
+    maps legacy tool names to their new names for backward compatibility
+    """
+
+    def __init__(self, tool_names: set[str]) -> None:
+        self._tool_names = tool_names
+
+    @classmethod
+    def default(cls) -> "ToolSet":
+        """
+        :return: the default tool set, which contains all tools that are enabled by default
+        """
+        from serena.tools import ToolRegistry
+
+        return cls(set(ToolRegistry().get_tool_names_default_enabled()))
+
+    def apply(self, *tool_inclusion_definitions: "ToolInclusionDefinition") -> "ToolSet":
+        """
+        Applies one or more tool inclusion definitions to this tool set,
+        resulting in a new tool set.
+
+        :param tool_inclusion_definitions: the definitions to apply
+        :return: a new tool set with the definitions applied
+        """
+        from serena.tools import ToolRegistry
+
+        def get_updated_tool_name(tool_name: str) -> str:
+            """Retrieves the updated tool name if the provided tool name is deprecated, logging a warning."""
+            if tool_name in self.LEGACY_TOOL_NAME_MAPPING:
+                new_tool_name = self.LEGACY_TOOL_NAME_MAPPING[tool_name]
+                log.warning("Tool name '%s' is deprecated, please use '%s' instead", tool_name, new_tool_name)
+                return new_tool_name
+            return tool_name
+
+        registry = ToolRegistry()
+        tool_names = set(self._tool_names)
+        for definition in tool_inclusion_definitions:
+            included_tools = []
+            excluded_tools = []
+            for included_tool in definition.included_optional_tools:
+                included_tool = get_updated_tool_name(included_tool)
+                if not registry.is_valid_tool_name(included_tool):
+                    raise ValueError(f"Invalid tool name '{included_tool}' provided for inclusion")
+                if included_tool not in tool_names:
+                    tool_names.add(included_tool)
+                    included_tools.append(included_tool)
+            for excluded_tool in definition.excluded_tools:
+                excluded_tool = get_updated_tool_name(excluded_tool)
+                if not registry.is_valid_tool_name(excluded_tool):
+                    raise ValueError(f"Invalid tool name '{excluded_tool}' provided for exclusion")
+                if excluded_tool in tool_names:
+                    tool_names.remove(excluded_tool)
+                    excluded_tools.append(excluded_tool)
+            if included_tools:
+                log.info(f"{definition} included {len(included_tools)} tools: {', '.join(included_tools)}")
+            if excluded_tools:
+                log.info(f"{definition} excluded {len(excluded_tools)} tools: {', '.join(excluded_tools)}")
+        return ToolSet(tool_names)
+
+    def without_editing_tools(self) -> "ToolSet":
+        """
+        :return: a new tool set that excludes all tools that can edit
+        """
+        from serena.tools import ToolRegistry
+
+        registry = ToolRegistry()
+        tool_names = set(self._tool_names)
+        for tool_name in self._tool_names:
+            if registry.get_tool_class_by_name(tool_name).can_edit():
+                tool_names.remove(tool_name)
+        return ToolSet(tool_names)
+
+    def get_tool_names(self) -> set[str]:
+        """
+        Returns the names of the tools that are currently included in the tool set.
+        """
+        return self._tool_names
+
+    def includes_name(self, tool_name: str) -> bool:
+        return tool_name in self._tool_names
 
 
 class SerenaAgent:
