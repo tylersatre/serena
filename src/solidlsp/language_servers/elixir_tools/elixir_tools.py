@@ -12,6 +12,7 @@ from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformId, PlatformUtils
+from solidlsp.lsp_protocol_handler import lsp_types
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -56,7 +57,7 @@ class ElixirTools(SolidLanguageServer):
         )
 
     @override
-    def _send_references_request(self, relative_file_path: str, line: int, column: int) -> list | None:
+    def _send_references_request(self, relative_file_path: str, line: int, column: int) -> list[lsp_types.Location] | None:
         """Override to filter out Next LS internal files from references."""
         from solidlsp.ls_utils import PathUtils
 
