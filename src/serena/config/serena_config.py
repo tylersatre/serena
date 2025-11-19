@@ -33,7 +33,6 @@ from serena.util.inspection import determine_programming_language_composition
 from solidlsp.ls_config import Language
 
 from ..analytics import RegisteredTokenCountEstimator
-from ..tools import ReplaceContentTool
 from ..util.class_decorators import singleton
 
 if TYPE_CHECKING:
@@ -71,7 +70,7 @@ class SerenaPaths:
 
 
 class ToolSet:
-    LEGACY_TOOL_NAME_MAPPING = {"replace_regex": ReplaceContentTool.get_name_from_cls()}
+    LEGACY_TOOL_NAME_MAPPING = {"replace_regex": "replace_content"}
     """
     maps legacy tool names to their new names for backward compatibility
     """
