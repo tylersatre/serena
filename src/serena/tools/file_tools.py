@@ -183,6 +183,7 @@ class ReplaceContentTool(Tool, ToolMarkerCanEdit):
         especially if it spans several lines. Note that you cannot make mistakes, because if the regex should match
         multiple occurrences while you disabled `allow_multiple_occurrences`, an error will be returned, and you can retry
         with a revised regex.
+        Therefore, using regex mode with suitable wildcards is usually the best choice!
 
         :param relative_path: the relative path to the file
         :param needle: the string or regex pattern to search for.
