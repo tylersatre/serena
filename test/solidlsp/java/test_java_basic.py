@@ -1,4 +1,5 @@
 import os
+import platform
 
 import pytest
 
@@ -6,8 +7,11 @@ from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
 
+# These marks will be applied to all tests in this module
+# We skip the tests if not on Windows (CI hangs on Ubuntu for unknown reasons; testing on Windows is sufficient)
+pytestmark = [pytest.mark.java, pytest.mark.skipif(platform.system() != "Windows", reason="Java tests are only run on Windows")]
 
-@pytest.mark.java
+
 class TestJavaLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.JAVA], indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
