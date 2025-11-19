@@ -31,7 +31,8 @@ from solidlsp.ls_utils import FileUtils, PathUtils, TextUtils
 from solidlsp.lsp_protocol_handler import lsp_types
 from solidlsp.lsp_protocol_handler import lsp_types as LSPTypes
 from solidlsp.lsp_protocol_handler.lsp_constants import LSPConstants
-from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, DocumentSymbol, LocationLink, SymbolInformation
+from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, DocumentSymbol, LocationLink, SymbolInformation, \
+    RenameParams
 from solidlsp.lsp_protocol_handler.server import (
     LSPError,
     ProcessLaunchInfo,
@@ -1860,7 +1861,7 @@ class SolidLanguageServer(ABC):
         :param new_name: The new name for the symbol
         :return: A WorkspaceEdit containing the changes needed to rename the symbol, or None if rename is not supported
         """
-        params = ls_types.RenameParams(
+        params = RenameParams(
             textDocument=ls_types.TextDocumentIdentifier(
                 uri=pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri()
             ),

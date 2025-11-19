@@ -354,17 +354,6 @@ class WorkspaceEdit(TypedDict):
     """ Document changes array for versioned edits. """
 
 
-class RenameParams(TypedDict):
-    """The parameters of a RenameRequest."""
-
-    textDocument: TextDocumentIdentifier
-    """ The document to rename. """
-    position: Position
-    """ The position at which this request was sent. """
-    newName: str
-    """ The new name of the symbol. """
-
-
 class Diagnostic(TypedDict):
     """Diagnostic information for a text document."""
 
