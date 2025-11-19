@@ -29,6 +29,24 @@ class Gopls(SolidLanguageServer):
         return super().is_ignored_dirname(dirname) or dirname in ["vendor", "node_modules", "dist", "build"]
 
     @staticmethod
+    def _determine_log_level(line: str) -> int:
+        """Classify gopls stderr output to avoid false-positive errors."""
+        line_lower = line.lower()
+
+        # File discovery messages that are not actual errors
+        if any(
+            [
+                "discover.go:" in line_lower,
+                "walker.go:" in line_lower,
+                "walking of {file://" in line_lower,
+                "bus: -> discover" in line_lower,
+            ]
+        ):
+            return logging.DEBUG
+
+        return SolidLanguageServer._determine_log_level(line)
+
+    @staticmethod
     def _get_go_version() -> str | None:
         """Get the installed Go version or None if not found."""
         try:

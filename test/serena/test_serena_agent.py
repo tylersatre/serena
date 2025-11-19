@@ -37,7 +37,7 @@ def serena_config():
                 project_root=str(repo_path),
                 project_config=ProjectConfig(
                     project_name=project_name,
-                    language=language,
+                    languages=[language],
                     ignored_paths=[],
                     excluded_tools=set(),
                     read_only=False,
@@ -86,7 +86,7 @@ class TestSerenaAgent:
     def test_find_symbol(self, serena_agent, symbol_name: str, expected_kind: str, expected_file: str):
         agent = serena_agent
         find_symbol_tool = agent.get_tool(FindSymbolTool)
-        result = find_symbol_tool.apply_ex(name_path=symbol_name)
+        result = find_symbol_tool.apply_ex(name_path_pattern=symbol_name)
 
         symbols = json.loads(result)
         assert any(
@@ -138,7 +138,7 @@ class TestSerenaAgent:
 
         # Find the symbol location first
         find_symbol_tool = agent.get_tool(FindSymbolTool)
-        result = find_symbol_tool.apply_ex(name_path=symbol_name, relative_path=def_file)
+        result = find_symbol_tool.apply_ex(name_path_pattern=symbol_name, relative_path=def_file)
 
         time.sleep(1)
         symbols = json.loads(result)
@@ -233,7 +233,7 @@ class TestSerenaAgent:
 
         find_symbol_tool = agent.get_tool(FindSymbolTool)
         result = find_symbol_tool.apply_ex(
-            name_path=name_path,
+            name_path_pattern=name_path,
             depth=0,
             relative_path=None,
             include_body=False,
@@ -248,7 +248,7 @@ class TestSerenaAgent:
             and expected_kind.lower() in s["kind"].lower()
             and expected_file in s["relative_path"]
             for s in symbols
-        ), f"Expected to find {name_path} ({expected_kind}) in {expected_file} for {agent._active_project.language.name}. Symbols: {symbols}"
+        ), f"Expected to find {name_path} ({expected_kind}) in {expected_file}. Symbols: {symbols}"
 
     @pytest.mark.parametrize(
         "serena_agent,name_path",
@@ -277,7 +277,7 @@ class TestSerenaAgent:
 
         find_symbol_tool = agent.get_tool(FindSymbolTool)
         result = find_symbol_tool.apply_ex(
-            name_path=name_path,
+            name_path_pattern=name_path,
             depth=0,
             substring_matching=True,
         )

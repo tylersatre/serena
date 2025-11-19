@@ -14,7 +14,7 @@ from typing import cast
 
 from overrides import override
 
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import GenericDocumentSymbol, LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformUtils
@@ -40,8 +40,24 @@ class RuntimeDependencyPaths:
 
 
 class EclipseJDTLS(SolidLanguageServer):
-    """
+    r"""
     The EclipseJDTLS class provides a Java specific implementation of the LanguageServer class
+
+    You can configure the following options in ls_specific_settings (in serena_config.yml):
+        - maven_user_settings: Path to Maven settings.xml file (default: ~/.m2/settings.xml)
+        - gradle_user_home: Path to Gradle user home directory (default: ~/.gradle)
+
+    Note: Gradle wrapper is disabled by default. Projects will use the bundled Gradle distribution.
+
+    Example configuration in ~/.serena/serena_config.yml:
+    ```yaml
+    ls_specific_settings:
+      java:
+        maven_user_settings: "/home/user/.m2/settings.xml"  # Unix/Linux/Mac
+        # maven_user_settings: 'C:\\Users\\YourName\\.m2\\settings.xml'  # Windows (use single quotes!)
+        gradle_user_home: "/home/user/.gradle"  # Unix/Linux/Mac
+        # gradle_user_home: 'C:\\Users\\YourName\\.gradle'  # Windows (use single quotes!)
+    ```
     """
 
     def __init__(
@@ -94,41 +110,39 @@ class EclipseJDTLS(SolidLanguageServer):
         # TODO: Add "self.runtime_dependency_paths.jre_home_path"/bin to $PATH as well
         proc_env = {"syntaxserver": "false", "JAVA_HOME": self.runtime_dependency_paths.jre_home_path}
         proc_cwd = repository_root_path
-        cmd = " ".join(
-            [
-                jre_path,
-                "--add-modules=ALL-SYSTEM",
-                "--add-opens",
-                "java.base/java.util=ALL-UNNAMED",
-                "--add-opens",
-                "java.base/java.lang=ALL-UNNAMED",
-                "--add-opens",
-                "java.base/sun.nio.fs=ALL-UNNAMED",
-                "-Declipse.application=org.eclipse.jdt.ls.core.id1",
-                "-Dosgi.bundles.defaultStartLevel=4",
-                "-Declipse.product=org.eclipse.jdt.ls.core.product",
-                "-Djava.import.generatesMetadataFilesAtProjectRoot=false",
-                "-Dfile.encoding=utf8",
-                "-noverify",
-                "-XX:+UseParallelGC",
-                "-XX:GCTimeRatio=4",
-                "-XX:AdaptiveSizePolicyWeight=90",
-                "-Dsun.zip.disableMemoryMapping=true",
-                "-Djava.lsp.joinOnCompletion=true",
-                "-Xmx3G",
-                "-Xms100m",
-                "-Xlog:disable",
-                "-Dlog.level=ALL",
-                f'"-javaagent:{lombok_jar_path}"',
-                f'"-Djdt.core.sharedIndexLocation={shared_cache_location}"',
-                "-jar",
-                f'"{jdtls_launcher_jar}"',
-                "-configuration",
-                f'"{jdtls_config_path}"',
-                "-data",
-                f'"{data_dir}"',
-            ]
-        )
+        cmd = [
+            jre_path,
+            "--add-modules=ALL-SYSTEM",
+            "--add-opens",
+            "java.base/java.util=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.lang=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/sun.nio.fs=ALL-UNNAMED",
+            "-Declipse.application=org.eclipse.jdt.ls.core.id1",
+            "-Dosgi.bundles.defaultStartLevel=4",
+            "-Declipse.product=org.eclipse.jdt.ls.core.product",
+            "-Djava.import.generatesMetadataFilesAtProjectRoot=false",
+            "-Dfile.encoding=utf8",
+            "-noverify",
+            "-XX:+UseParallelGC",
+            "-XX:GCTimeRatio=4",
+            "-XX:AdaptiveSizePolicyWeight=90",
+            "-Dsun.zip.disableMemoryMapping=true",
+            "-Djava.lsp.joinOnCompletion=true",
+            "-Xmx3G",
+            "-Xms100m",
+            "-Xlog:disable",
+            "-Dlog.level=ALL",
+            f"-javaagent:{lombok_jar_path}",
+            f"-Djdt.core.sharedIndexLocation={shared_cache_location}",
+            "-jar",
+            f"{jdtls_launcher_jar}",
+            "-configuration",
+            f"{jdtls_config_path}",
+            "-data",
+            f"{data_dir}",
+        ]
 
         self.service_ready_event = threading.Event()
         self.intellicode_enable_command_available = threading.Event()
@@ -327,6 +341,56 @@ class EclipseJDTLS(SolidLanguageServer):
             repository_absolute_path = os.path.abspath(repository_absolute_path)
         repo_uri = pathlib.Path(repository_absolute_path).as_uri()
 
+        # Load user's Maven and Gradle configuration paths from ls_specific_settings["java"]
+
+        # Maven settings: default to ~/.m2/settings.xml
+        default_maven_settings_path = os.path.join(os.path.expanduser("~"), ".m2", "settings.xml")
+        custom_maven_settings_path = self._custom_settings.get("maven_user_settings")
+        if custom_maven_settings_path is not None:
+            # User explicitly provided a path
+            if not os.path.exists(custom_maven_settings_path):
+                error_msg = (
+                    f"Provided maven settings file not found: {custom_maven_settings_path}. "
+                    f"Fix: create the file, update path in ~/.serena/serena_config.yml (ls_specific_settings -> java -> maven_user_settings), "
+                    f"or remove the setting to use default ({default_maven_settings_path})"
+                )
+                self.logger.log(error_msg, logging.ERROR)
+                raise FileNotFoundError(error_msg)
+            maven_settings_path = custom_maven_settings_path
+            self.logger.log(f"Using Maven settings from custom location: {maven_settings_path}", logging.INFO)
+        elif os.path.exists(default_maven_settings_path):
+            maven_settings_path = default_maven_settings_path
+            self.logger.log(f"Using Maven settings from default location: {maven_settings_path}", logging.INFO)
+        else:
+            maven_settings_path = None
+            self.logger.log(
+                f"Maven settings not found at default location ({default_maven_settings_path}), will use JDTLS defaults", logging.INFO
+            )
+
+        # Gradle user home: default to ~/.gradle
+        default_gradle_home = os.path.join(os.path.expanduser("~"), ".gradle")
+        custom_gradle_home = self._custom_settings.get("gradle_user_home")
+        if custom_gradle_home is not None:
+            # User explicitly provided a path
+            if not os.path.exists(custom_gradle_home):
+                error_msg = (
+                    f"Gradle user home directory not found: {custom_gradle_home}. "
+                    f"Fix: create the directory, update path in ~/.serena/serena_config.yml (ls_specific_settings -> java -> gradle_user_home), "
+                    f"or remove the setting to use default (~/.gradle)"
+                )
+                self.logger.log(error_msg, logging.ERROR)
+                raise FileNotFoundError(error_msg)
+            gradle_user_home = custom_gradle_home
+            self.logger.log(f"Using Gradle user home from custom location: {gradle_user_home}", logging.INFO)
+        elif os.path.exists(default_gradle_home):
+            gradle_user_home = default_gradle_home
+            self.logger.log(f"Using Gradle user home from default location: {gradle_user_home}", logging.INFO)
+        else:
+            gradle_user_home = None
+            self.logger.log(
+                f"Gradle user home not found at default location ({default_gradle_home}), will use JDTLS defaults", logging.INFO
+            )
+
         initialize_params = {
             "locale": "en",
             "rootPath": repository_absolute_path,
@@ -513,7 +577,7 @@ class EclipseJDTLS(SolidLanguageServer):
                             "checkProjectSettingsExclusions": False,
                             "updateBuildConfiguration": "interactive",
                             "maven": {
-                                "userSettings": None,
+                                "userSettings": maven_settings_path,
                                 "globalSettings": None,
                                 "notCoveredPluginExecutionSeverity": "warning",
                                 "defaultMojoExecutionAction": "ignore",
@@ -539,7 +603,7 @@ class EclipseJDTLS(SolidLanguageServer):
                                 "offline": {"enabled": False},
                                 "arguments": None,
                                 "jvmArguments": None,
-                                "user": {"home": None},
+                                "user": {"home": gradle_user_home},
                                 "annotationProcessing": {"enabled": True},
                             },
                             "exclusions": [
@@ -550,7 +614,9 @@ class EclipseJDTLS(SolidLanguageServer):
                             ],
                             "generatesMetadataFilesAtProjectRoot": False,
                         },
-                        "maven": {"downloadSources": True, "updateSnapshots": True},
+                        # Set updateSnapshots to False to improve performance and avoid unnecessary network calls
+                        # Snapshots will only be updated when explicitly requested by the user
+                        "maven": {"downloadSources": True, "updateSnapshots": False},
                         "eclipse": {"downloadSources": True},
                         "signatureHelp": {"enabled": True, "description": {"enabled": True}},
                         "implementationsCodeLens": {"enabled": True},
@@ -722,3 +788,23 @@ class EclipseJDTLS(SolidLanguageServer):
 
         # TODO: Add comments about why we wait here, and how this can be optimized
         self.service_ready_event.wait()
+
+    def _request_document_symbols(self, relative_file_path: str, file_data: LSPFileBuffer | None) -> list[GenericDocumentSymbol]:
+        result = super()._request_document_symbols(relative_file_path, file_data=file_data)
+
+        # JDTLS sometimes returns symbol names with type information to handle overloads,
+        # e.g. "myMethod(int) <T>", but we want overloads to be handled via overload_idx,
+        # which requires the name to be just "myMethod".
+
+        def fix_name(symbol: GenericDocumentSymbol):
+            if "(" in symbol["name"]:
+                symbol["name"] = symbol["name"][: symbol["name"].index("(")]
+            children = symbol.get("children")
+            if children:
+                for child in children:
+                    fix_name(child)
+
+        for root_symbol in result:
+            fix_name(root_symbol)
+
+        return result

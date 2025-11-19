@@ -7,7 +7,6 @@ import os
 import pathlib
 import shutil
 import threading
-from time import sleep
 from typing import Any, cast
 
 from overrides import override
@@ -21,7 +20,6 @@ from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
-from ..lsp_protocol_handler import lsp_types
 from .common import RuntimeDependency, RuntimeDependencyCollection
 
 # Platform-specific imports
@@ -71,6 +69,11 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             "build",
             "coverage",
         ]
+
+    @staticmethod
+    def _determine_log_level(line: str) -> int:
+        """Classify typescript-language-server stderr output to avoid false-positive errors."""
+        return SolidLanguageServer._determine_log_level(line)
 
     @classmethod
     def _setup_runtime_dependencies(

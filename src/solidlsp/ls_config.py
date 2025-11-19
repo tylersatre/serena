@@ -58,6 +58,8 @@ class Language(str, Enum):
     REGO = "rego"
     SCALA = "scala"
     JULIA = "julia"
+    FORTRAN = "fortran"
+    HASKELL = "haskell"
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -76,6 +78,10 @@ class Language(str, Enum):
     Must be explicitly specified as the main language, not auto-detected.
     This is an edge case primarily useful when working on documentation-heavy projects.
     """
+    YAML = "yaml"
+    """YAML language server (experimental).
+    Must be explicitly specified as the main language, not auto-detected.
+    """
 
     @classmethod
     def iter_all(cls, include_experimental: bool = False) -> Iterable[Self]:
@@ -87,7 +93,7 @@ class Language(str, Enum):
         """
         Check if the language server is experimental or deprecated.
         """
-        return self in {self.TYPESCRIPT_VTS, self.PYTHON_JEDI, self.CSHARP_OMNISHARP, self.RUBY_SOLARGRAPH, self.MARKDOWN}
+        return self in {self.TYPESCRIPT_VTS, self.PYTHON_JEDI, self.CSHARP_OMNISHARP, self.RUBY_SOLARGRAPH, self.MARKDOWN, self.YAML}
 
     def __str__(self) -> str:
         return self.value
@@ -140,6 +146,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.swift")
             case self.BASH:
                 return FilenameMatcher("*.sh", "*.bash")
+            case self.YAML:
+                return FilenameMatcher("*.yaml", "*.yml")
             case self.ZIG:
                 return FilenameMatcher("*.zig", "*.zon")
             case self.LUA:
@@ -158,6 +166,12 @@ class Language(str, Enum):
                 return FilenameMatcher("*.scala", "*.sbt")
             case self.JULIA:
                 return FilenameMatcher("*.jl")
+            case self.FORTRAN:
+                return FilenameMatcher(
+                    "*.f90", "*.F90", "*.f95", "*.F95", "*.f03", "*.F03", "*.f08", "*.F08", "*.f", "*.F", "*.for", "*.FOR", "*.fpp", "*.FPP"
+                )
+            case self.HASKELL:
+                return FilenameMatcher("*.hs", "*.lhs")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -251,6 +265,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.bash_language_server import BashLanguageServer
 
                 return BashLanguageServer
+            case self.YAML:
+                from solidlsp.language_servers.yaml_language_server import YamlLanguageServer
+
+                return YamlLanguageServer
             case self.ZIG:
                 from solidlsp.language_servers.zls import ZigLanguageServer
 
@@ -291,6 +309,14 @@ class Language(str, Enum):
                 from solidlsp.language_servers.julia_server import JuliaLanguageServer
 
                 return JuliaLanguageServer
+            case self.FORTRAN:
+                from solidlsp.language_servers.fortran_language_server import FortranLanguageServer
+
+                return FortranLanguageServer
+            case self.HASKELL:
+                from solidlsp.language_servers.haskell_language_server import HaskellLanguageServer
+
+                return HaskellLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 

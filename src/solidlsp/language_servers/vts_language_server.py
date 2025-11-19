@@ -9,7 +9,6 @@ import os
 import pathlib
 import shutil
 import threading
-from time import sleep
 from typing import cast
 
 from overrides import override
@@ -22,7 +21,6 @@ from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
-from ..lsp_protocol_handler import lsp_types
 from .common import RuntimeDependency, RuntimeDependencyCollection
 
 

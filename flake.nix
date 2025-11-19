@@ -76,7 +76,11 @@
       formatter = pkgs.alejandra;
 
       packages = {
-        serena = pythonSet.mkVirtualEnv "serena" workspace.deps.default;
+        serena-env = pythonSet.mkVirtualEnv "serena-env" workspace.deps.default;
+        serena = pkgs.runCommand "serena" {} ''
+          mkdir -p $out/bin
+          ln -s ${packages.serena-env}/bin/serena $out/bin/serena
+        '';
         default = packages.serena;
       };
 

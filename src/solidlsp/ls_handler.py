@@ -14,6 +14,7 @@ from typing import Any
 import psutil
 from sensai.util.string import ToStringMixin
 
+from solidlsp.ls_config import Language
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_request import LanguageServerRequest
 from solidlsp.lsp_protocol_handler.lsp_requests import LspNotification
@@ -32,7 +33,7 @@ from solidlsp.lsp_protocol_handler.server import (
     make_request,
     make_response,
 )
-from solidlsp.util.subprocess_util import subprocess_kwargs
+from solidlsp.util.subprocess_util import quote_arg, subprocess_kwargs
 
 log = logging.getLogger(__name__)
 
@@ -42,9 +43,10 @@ class LanguageServerTerminatedException(Exception):
     Exception raised when the language server process has terminated unexpectedly.
     """
 
-    def __init__(self, message: str, cause: Exception | None = None) -> None:
+    def __init__(self, message: str, language: Language, cause: Exception | None = None) -> None:
         super().__init__(message)
         self.message = message
+        self.language = language
         self.cause = cause
 
     def __str__(self) -> str:
@@ -52,7 +54,6 @@ class LanguageServerTerminatedException(Exception):
 
 
 class Request(ToStringMixin):
-
     @dataclass
     class Result:
         payload: PayloadLike | None = None
@@ -132,10 +133,14 @@ class SolidLanguageServerHandler:
     def __init__(
         self,
         process_launch_info: ProcessLaunchInfo,
+        language: Language,
+        determine_log_level: Callable[[str], int],
         logger: Callable[[str, str, StringDict | str], None] | None = None,
         start_independent_lsp_process: bool = True,
         request_timeout: float | None = None,
     ) -> None:
+        self.language = language
+        self._determine_log_level = determine_log_level
         self.send = LanguageServerRequest(self)
         self.notify = LspNotification(self.send_notification)
 
@@ -185,7 +190,7 @@ class SolidLanguageServerHandler:
         if not isinstance(cmd, str) and not is_windows:
             # Since we are using the shell, we need to convert the command list to a single string
             # on Linux/macOS
-            cmd = " ".join(cmd)
+            cmd = " ".join(map(quote_arg, cmd))
         log.info("Starting language server process via command: %s", self.process_launch_info.cmd)
         kwargs = subprocess_kwargs()
         kwargs["start_new_session"] = self.start_independent_lsp_process
@@ -211,12 +216,12 @@ class SolidLanguageServerHandler:
         # start threads to read stdout and stderr of the process
         threading.Thread(
             target=self._read_ls_process_stdout,
-            name="LSP-stdout-reader",
+            name=f"LSP-stdout-reader:{self.language.value}",
             daemon=True,
         ).start()
         threading.Thread(
             target=self._read_ls_process_stderr,
-            name="LSP-stderr-reader",
+            name=f"LSP-stderr-reader:{self.language.value}",
             daemon=True,
         ).start()
 
@@ -310,8 +315,7 @@ class SolidLanguageServerHandler:
         if self.logger is not None:
             self.logger("client", "logger", message)
 
-    @staticmethod
-    def _read_bytes_from_process(process: subprocess.Popen[bytes], stream: Any, num_bytes: int) -> bytes:
+    def _read_bytes_from_process(self, process, stream, num_bytes):
         """Read exactly num_bytes from process stdout"""
         data = b""
         while len(data) < num_bytes:
@@ -319,7 +323,8 @@ class SolidLanguageServerHandler:
             if not chunk:
                 if process.poll() is not None:
                     raise LanguageServerTerminatedException(
-                        f"Process terminated while trying to read response (read {num_bytes} of {len(data)} bytes before termination)"
+                        f"Process terminated while trying to read response (read {num_bytes} of {len(data)} bytes before termination)",
+                        language=self.language,
                     )
                 # Process still running but no data available yet, retry after a short delay
                 time.sleep(0.01)
@@ -356,13 +361,15 @@ class SolidLanguageServerHandler:
         except LanguageServerTerminatedException as e:
             exception = e
         except (BrokenPipeError, ConnectionResetError) as e:
-            exception = LanguageServerTerminatedException("Language server process terminated while reading stdout", cause=e)
+            exception = LanguageServerTerminatedException("Language server process terminated while reading stdout", self.language, cause=e)
         except Exception as e:
-            exception = LanguageServerTerminatedException("Unexpected error while reading stdout from language server process", cause=e)
+            exception = LanguageServerTerminatedException(
+                "Unexpected error while reading stdout from language server process", self.language, cause=e
+            )
         log.info("Language server stdout reader thread has terminated")
         if not self._is_shutting_down:
             if exception is None:
-                exception = LanguageServerTerminatedException("Language server stdout read process terminated unexpectedly")
+                exception = LanguageServerTerminatedException("Language server stdout read process terminated unexpectedly", self.language)
             log.error(str(exception))
             self._cancel_pending_requests(exception)
 
@@ -379,11 +386,7 @@ class SolidLanguageServerHandler:
                 if not line:
                     continue
                 line = line.decode(ENCODING, errors="replace")
-                line_lower = line.lower()
-                if "error" in line_lower or "exception" in line_lower or line.startswith("E["):
-                    level = logging.ERROR
-                else:
-                    level = logging.INFO
+                level = self._determine_log_level(line)
                 log.log(level, line)
         except Exception as e:
             log.error("Error while reading stderr from language server process: %s", e, exc_info=e)
