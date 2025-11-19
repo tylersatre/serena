@@ -34,6 +34,7 @@ from solidlsp.ls_config import Language
 
 from ..analytics import RegisteredTokenCountEstimator
 from ..util.class_decorators import singleton
+from ..util.cli_util import ask_yes_no
 
 if TYPE_CHECKING:
     from ..project import Project
@@ -113,7 +114,12 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
 
     @classmethod
     def autogenerate(
-        cls, project_root: str | Path, project_name: str | None = None, languages: list[Language] | None = None, save_to_disk: bool = True
+        cls,
+        project_root: str | Path,
+        project_name: str | None = None,
+        languages: list[Language] | None = None,
+        save_to_disk: bool = True,
+        interactive: bool = False,
     ) -> Self:
         """
         Autogenerate a project configuration for a given project root.
@@ -123,6 +129,7 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
             containing the project
         :param languages: the languages of the project; if None, they will be determined automatically
         :param save_to_disk: whether to save the project configuration to disk
+        :param interactive: whether to run in interactive CLI mode, asking the user for input where appropriate
         :return: the project configuration
         """
         project_root = Path(project_root).resolve()
@@ -131,6 +138,7 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
         with LogTime("Project configuration auto-generation", logger=log):
             project_name = project_name or project_root.name
             if languages is None:
+                # determine languages automatically
                 language_composition = determine_programming_language_composition(str(project_root))
                 if len(language_composition) == 0:
                     raise ValueError(
@@ -143,17 +151,39 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
                         f"  project_name: {project_name}\n"
                         f"  language: python  # or typescript, java, csharp, rust, go, ruby, cpp, php, swift, elixir, terraform, bash\n"
                     )
-                # find the language with the highest percentage
-                dominant_language = max(language_composition.keys(), key=lambda lang: language_composition[lang])
-                languages_to_use = [dominant_language]
+                # sort languages by number of files found
+                languages_and_percentages = sorted(language_composition.items(), key=lambda item: item[1], reverse=True)
+                # find the language with the highest percentage and enable it
+                top_language_pair = languages_and_percentages[0]
+                other_language_pairs = languages_and_percentages[1:]
+                languages_to_use = [top_language_pair[0]]
+                # if in interactive mode, ask the user which other languages to enable
+                if len(other_language_pairs) > 0 and interactive:
+                    print(
+                        "Detected and enabled main language '%s' (%.2f%% of source files)." % (top_language_pair[0], top_language_pair[1])
+                    )
+                    print(f"Additionally detected {len(other_language_pairs)} other language(s).\n")
+                    print("Note: Enable only languages you need symbolic retrieval/editing capabilities for.")
+                    print("      Additional language servers use resources and some languages may require additional")
+                    print("      system-level installations/configuration (see Serena documentation).")
+                    print("\nWhich additional languages do you want to enable?")
+                    for lang, perc in other_language_pairs:
+                        enable = ask_yes_no("Enable %s (%.2f%% of source files)?" % (lang, perc), default=False)
+                        if enable:
+                            languages_to_use.append(lang)
+                    print()
             else:
                 languages_to_use = [lang.value for lang in languages]
             config_with_comments = cls.load_commented_map(PROJECT_TEMPLATE_FILE)
             config_with_comments["project_name"] = project_name
             config_with_comments["languages"] = languages_to_use
             if save_to_disk:
-                save_yaml(str(project_root / cls.rel_path_to_project_yml()), config_with_comments, preserve_comments=True)
+                save_yaml(cls.path_to_project_yml(project_root), config_with_comments, preserve_comments=True)
             return cls._from_dict(config_with_comments)
+
+    @classmethod
+    def path_to_project_yml(cls, project_root: str | Path) -> str:
+        return os.path.join(project_root, cls.rel_path_to_project_yml())
 
     @classmethod
     def rel_path_to_project_yml(cls) -> str:
