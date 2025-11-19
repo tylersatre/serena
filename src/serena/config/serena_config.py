@@ -33,6 +33,7 @@ from serena.util.inspection import determine_programming_language_composition
 from solidlsp.ls_config import Language
 
 from ..analytics import RegisteredTokenCountEstimator
+from ..tools import ReplaceContentTool
 from ..util.class_decorators import singleton
 
 if TYPE_CHECKING:
@@ -70,6 +71,11 @@ class SerenaPaths:
 
 
 class ToolSet:
+    LEGACY_TOOL_NAME_MAPPING = {"replace_regex": ReplaceContentTool.get_name_from_cls()}
+    """
+    maps legacy tool names to their new names for backward compatibility
+    """
+
     def __init__(self, tool_names: set[str]) -> None:
         self._tool_names = tool_names
 
@@ -89,18 +95,28 @@ class ToolSet:
         """
         from serena.tools import ToolRegistry
 
+        def get_updated_tool_name(tool_name: str) -> str:
+            """Retrieves the updated tool name if the provided tool name is deprecated, logging a warning."""
+            if tool_name in self.LEGACY_TOOL_NAME_MAPPING:
+                new_tool_name = self.LEGACY_TOOL_NAME_MAPPING[tool_name]
+                log.warning("Tool name '%s' is deprecated, please use '%s' instead", tool_name, new_tool_name)
+                return new_tool_name
+            return tool_name
+
         registry = ToolRegistry()
         tool_names = set(self._tool_names)
         for definition in tool_inclusion_definitions:
             included_tools = []
             excluded_tools = []
             for included_tool in definition.included_optional_tools:
+                included_tool = get_updated_tool_name(included_tool)
                 if not registry.is_valid_tool_name(included_tool):
                     raise ValueError(f"Invalid tool name '{included_tool}' provided for inclusion")
                 if included_tool not in tool_names:
                     tool_names.add(included_tool)
                     included_tools.append(included_tool)
             for excluded_tool in definition.excluded_tools:
+                excluded_tool = get_updated_tool_name(excluded_tool)
                 if not registry.is_valid_tool_name(excluded_tool):
                     raise ValueError(f"Invalid tool name '{excluded_tool}' provided for exclusion")
                 if excluded_tool in tool_names:

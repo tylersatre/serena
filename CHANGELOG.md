@@ -17,6 +17,8 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Tools:
   * Added `RenameSymbolTool` for renaming symbols across the codebase (if LS supports this operation).
+  * Replaced `ReplaceRegexTool` with `ReplaceContentTool`, which supports both plain text and regex-based replacements
+    (and which requires no escaping in the replacement text, making it more robust) 
 
 * Language support:
 
