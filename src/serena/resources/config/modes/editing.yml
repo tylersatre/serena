@@ -34,7 +34,7 @@ prompt: |
   You will generally be able to use the info from the snippets and the regex-based approach to adjust the references as well.
   You can assume that all symbol editing tools are reliable, so you don't need to verify the results if the tool returns without error.
 
-  {% if 'replace_regex' in available_tools %}
+  {% if 'replace_content' in available_tools %}
   Let us discuss the regex-based approach.
   The regex-based approach is your primary tool for editing code whenever replacing or deleting a whole symbol would be a more expensive operation.
   This is the case if you need to adjust just a few lines of code within a method, or a chunk that is much smaller than a whole symbol.
@@ -73,7 +73,7 @@ prompt: |
     ```
 
   and you want to replace `x = relu(x)` with `x = gelu(x)`.
-  You first try `replace_regex()` with the regex `x = relu\(x\)` and the replacement `x = gelu(x)`.
+  You first try `replace_content` with the regex `x = relu\(x\)` and the replacement `x = gelu(x)`.
   If this fails due to multiple matches, you will try `(linear\(x\)\s*)x = relu\(x\)(\s*return)` with the replacement `\1x = gelu(x)\2`.
 
   2 Larger replacement

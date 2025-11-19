@@ -1,6 +1,6 @@
 import json
 
-from serena.tools import ReplaceRegexTool, Tool
+from serena.tools import ReplaceContentTool, Tool
 
 
 class WriteMemoryTool(Tool):
@@ -84,6 +84,6 @@ class EditMemoryTool(Tool):
             backreferences like \1, \2, etc. for groups matched by the regex.
             Insert new content verbatim, except for backslashes, which have to be escaped.
         """
-        replace_regex_tool = self.agent.get_tool(ReplaceRegexTool)
+        replace_content_tool = self.agent.get_tool(ReplaceContentTool)
         rel_path = self.memories_manager.get_memory_file_path(memory_file_name).relative_to(self.get_project_root())
-        return replace_regex_tool.replace_regex(str(rel_path), regex, repl, require_not_ignored=False)
+        return replace_content_tool.replace_content(str(rel_path), regex, repl, mode="regex", require_not_ignored=False)
