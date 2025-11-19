@@ -91,7 +91,7 @@ class DocumentSymbols:
         self.root_symbols = root_symbols
         self._all_symbols: list[ls_types.UnifiedSymbolInformation] | None = None
 
-    def __getstate__(self):
+    def __getstate__(self) -> dict:
         return getstate(DocumentSymbols, self, transient_properties=["_all_symbols"])
 
     def iter_symbols(self) -> Iterator[ls_types.UnifiedSymbolInformation]:
@@ -103,7 +103,7 @@ class DocumentSymbols:
             yield from self._all_symbols
             return
 
-        def traverse(s: ls_types.UnifiedSymbolInformation):
+        def traverse(s: ls_types.UnifiedSymbolInformation) -> Iterator[ls_types.UnifiedSymbolInformation]:
             yield s
             for child in s.get("children", []):
                 yield from traverse(child)
@@ -297,7 +297,7 @@ class SolidLanguageServer(ABC):
         self.completions_available = threading.Event()
         if config.trace_lsp_communication:
 
-            def logging_fn(source: str, target: str, msg: StringDict | str):
+            def logging_fn(source: str, target: str, msg: StringDict | str) -> None:
                 self.logger.log(f"LSP: {source} -> {target}: {msg!s}", self.logger.logger.level)
 
         else:
@@ -673,10 +673,10 @@ class SolidLanguageServer(ABC):
                     new_item.update(item)
                     new_item["absolutePath"] = PathUtils.uri_to_path(new_item["uri"])
                     new_item["relativePath"] = PathUtils.get_relative_path(new_item["absolutePath"], self.repository_root_path)
-                    ret.append(ls_types.Location(new_item))
+                    ret.append(ls_types.Location(**new_item))  # type: ignore
                 elif LSPConstants.TARGET_URI in item and LSPConstants.TARGET_RANGE in item and LSPConstants.TARGET_SELECTION_RANGE in item:
-                    new_item: ls_types.Location = {}
-                    new_item["uri"] = item[LSPConstants.TARGET_URI]
+                    new_item: dict = {}  # type: ignore
+                    new_item["uri"] = item[LSPConstants.TARGET_URI]  # type: ignore
                     new_item["absolutePath"] = PathUtils.uri_to_path(new_item["uri"])
                     new_item["relativePath"] = PathUtils.get_relative_path(new_item["absolutePath"], self.repository_root_path)
                     new_item["range"] = item[LSPConstants.TARGET_SELECTION_RANGE]  # type: ignore
@@ -688,7 +688,7 @@ class SolidLanguageServer(ABC):
             assert LSPConstants.URI in response
             assert LSPConstants.RANGE in response
 
-            new_item = {}
+            new_item: dict = {}  # type: ignore
             new_item.update(response)
             new_item["absolutePath"] = PathUtils.uri_to_path(new_item["uri"])
             new_item["relativePath"] = PathUtils.get_relative_path(new_item["absolutePath"], self.repository_root_path)
@@ -802,18 +802,18 @@ class SolidLanguageServer(ABC):
         with self.open_file(relative_file_path):
             response = self.server.send.text_document_diagnostic(
                 {
-                    LSPConstants.TEXT_DOCUMENT: {
+                    LSPConstants.TEXT_DOCUMENT: {  # type: ignore
                         LSPConstants.URI: pathlib.Path(str(PurePath(self.repository_root_path, relative_file_path))).as_uri()
                     }
                 }
             )
 
         if response is None:
-            return []
+            return []  # type: ignore
 
         assert isinstance(response, dict), f"Unexpected response from Language Server (expected list, got {type(response)}): {response}"
         ret: list[ls_types.Diagnostic] = []
-        for item in response["items"]:
+        for item in response["items"]:  # type: ignore
             new_item: ls_types.Diagnostic = {
                 "uri": pathlib.Path(str(PurePath(self.repository_root_path, relative_file_path))).as_uri(),
                 "severity": item["severity"],

@@ -409,4 +409,4 @@ def extract_text_edits(workspace_edit: WorkspaceEdit) -> dict[str, list[TextEdit
                 changes[uri] = edits
         return changes
     else:
-        raise f"Invalid WorkspaceEdit (expected 'changes' or 'documentChanges' key):\n{workspace_edit}"
+        raise Exception(f"Invalid WorkspaceEdit (expected 'changes' or 'documentChanges' key):\n{workspace_edit}")

@@ -2,7 +2,7 @@ import platform
 import subprocess
 
 
-def subprocess_kwargs():
+def subprocess_kwargs() -> dict:
     """
     Returns a dictionary of keyword arguments for subprocess calls, adding platform-specific
     flags that we want to use consistently.

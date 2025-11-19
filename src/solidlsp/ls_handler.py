@@ -315,7 +315,7 @@ class SolidLanguageServerHandler:
         if self.logger is not None:
             self.logger("client", "logger", message)
 
-    def _read_bytes_from_process(self, process, stream, num_bytes):
+    def _read_bytes_from_process(self, process, stream, num_bytes) -> bytes:  # type: ignore
         """Read exactly num_bytes from process stdout"""
         data = b""
         while len(data) < num_bytes:
@@ -385,9 +385,9 @@ class SolidLanguageServerHandler:
                 line = self.process.stderr.readline()
                 if not line:
                     continue
-                line = line.decode(ENCODING, errors="replace")
-                level = self._determine_log_level(line)
-                log.log(level, line)
+                line_str = line.decode(ENCODING, errors="replace")
+                level = self._determine_log_level(line_str)
+                log.log(level, line_str)
         except Exception as e:
             log.error("Error while reading stderr from language server process: %s", e, exc_info=e)
         if not self._is_shutting_down:
