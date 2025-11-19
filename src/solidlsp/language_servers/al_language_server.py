@@ -1,3 +1,4 @@
+# type: ignore
 """AL Language Server implementation for Microsoft Dynamics 365 Business Central."""
 
 import logging

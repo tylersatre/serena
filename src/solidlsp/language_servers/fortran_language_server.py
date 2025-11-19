@@ -1,3 +1,4 @@
+# type: ignore
 """
 Fortran Language Server implementation using fortls.
 """

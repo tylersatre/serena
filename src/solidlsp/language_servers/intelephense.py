@@ -148,7 +148,7 @@ class Intelephense(SolidLanguageServer):
             initialization_options["intelephense.files.maxSize"] = max_file_size
 
         initialize_params["initializationOptions"] = initialization_options
-        return initialize_params
+        return initialize_params  # type: ignore
 
     def _start_server(self) -> None:
         """Start Intelephense server process"""

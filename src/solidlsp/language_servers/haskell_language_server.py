@@ -7,6 +7,7 @@ import os
 import pathlib
 import shutil
 import time
+from typing import Any
 
 from overrides import override
 
@@ -25,7 +26,7 @@ class HaskellLanguageServer(SolidLanguageServer):
     """
 
     @staticmethod
-    def _ensure_hls_installed():
+    def _ensure_hls_installed() -> str:
         """Ensure haskell-language-server-wrapper is available."""
         # Try common locations
         common_paths = [
@@ -310,20 +311,20 @@ class HaskellLanguageServer(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params
+        return initialize_params  # type: ignore
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the Haskell Language Server
         """
 
-        def do_nothing(params):
+        def do_nothing(params: Any) -> None:
             return
 
-        def window_log_message(msg):
+        def window_log_message(msg: dict) -> None:
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             """Handle dynamic capability registration from HLS"""
             if "registrations" in params:
                 for registration in params.get("registrations", []):
@@ -331,7 +332,7 @@ class HaskellLanguageServer(SolidLanguageServer):
                     self.logger.log(f"HLS registered capability: {method}", logging.INFO)
             return
 
-        def workspace_configuration_handler(params):
+        def workspace_configuration_handler(params: dict) -> Any:
             """Handle workspace/configuration requests from HLS"""
             self.logger.log(f"HLS requesting configuration: {params}", logging.INFO)
 

@@ -1,3 +1,4 @@
+# type: ignore
 """
 Provides Nix specific instantiation of the LanguageServer class using nixd (Nix Language Server).
 

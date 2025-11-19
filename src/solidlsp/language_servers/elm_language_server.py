@@ -1,3 +1,4 @@
+# type: ignore
 """
 Provides Elm specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Elm.
 """

@@ -41,7 +41,7 @@ class RustAnalyzer(SolidLanguageServer):
         return SolidLanguageServer._determine_log_level(line)
 
     @staticmethod
-    def _get_rustup_version():
+    def _get_rustup_version() -> str | None:
         """Get installed rustup version or None if not found."""
         try:
             result = subprocess.run(["rustup", "--version"], capture_output=True, text=True, check=False)
@@ -52,7 +52,7 @@ class RustAnalyzer(SolidLanguageServer):
         return None
 
     @staticmethod
-    def _get_rust_analyzer_path():
+    def _get_rust_analyzer_path() -> str | None:
         """Get rust-analyzer path via rustup. Returns None if not found."""
         try:
             # Note: we avoid using system PATH to avoid picking up incorrect aliases
@@ -66,8 +66,12 @@ class RustAnalyzer(SolidLanguageServer):
         return None
 
     @staticmethod
-    def _ensure_rust_analyzer_installed():
-        """Ensure rust-analyzer is available, install via rustup if needed."""
+    def _ensure_rust_analyzer_installed() -> str:
+        """
+        Ensure rust-analyzer is available, install via rustup if needed.
+
+        :return: path to rust-analyzer executable
+        """
         path = RustAnalyzer._get_rust_analyzer_path()
         if path:
             return path

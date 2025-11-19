@@ -17,6 +17,7 @@ from overrides import override
 from solidlsp.ls import LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_types import UnifiedSymbolInformation
 from solidlsp.ls_utils import FileUtils, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import DocumentSymbol, InitializeParams, SymbolInformation
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -800,12 +801,12 @@ class EclipseJDTLS(SolidLanguageServer):
         # e.g. "myMethod(int) <T>", but we want overloads to be handled via overload_idx,
         # which requires the name to be just "myMethod".
 
-        def fix_name(symbol: SymbolInformation | DocumentSymbol) -> None:
+        def fix_name(symbol: SymbolInformation | DocumentSymbol | UnifiedSymbolInformation) -> None:
             if "(" in symbol["name"]:
                 symbol["name"] = symbol["name"][: symbol["name"].index("(")]
             children = symbol.get("children")
             if children:
-                for child in children:
+                for child in children:  # type: ignore
                     fix_name(child)
 
         for root_symbol in result:

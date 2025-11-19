@@ -435,6 +435,7 @@ class CSharpLanguageServer(SolidLanguageServer):
 
         # Download .NET 9 runtime using config
         dotnet_dir = Path(cls.ls_resources_dir(solidlsp_settings)) / "dotnet-runtime-9.0"
+        assert dotnet_runtime_dep.binary_name is not None, "Runtime dependency must have a binary_name"
         dotnet_exe = dotnet_dir / dotnet_runtime_dep.binary_name
 
         if dotnet_exe.exists():
@@ -642,7 +643,7 @@ class CSharpLanguageServer(SolidLanguageServer):
             # Just acknowledge the request - we don't need to track these for now
             return
 
-        def handle_project_needs_restore(params):
+        def handle_project_needs_restore(params: dict) -> None:
             return
 
         # Set up notification handlers

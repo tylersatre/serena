@@ -1,3 +1,4 @@
+# type: ignore
 """
 Provides Zig specific instantiation of the LanguageServer class using ZLS (Zig Language Server).
 """

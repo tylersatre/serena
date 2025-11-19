@@ -1,3 +1,4 @@
+# type: ignore
 """
 Provides Lua specific instantiation of the LanguageServer class using lua-language-server.
 """
@@ -262,7 +263,7 @@ class LuaLanguageServer(SolidLanguageServer):
         def register_capability_handler(params):
             return
 
-        def window_log_message(msg):
+        def window_log_message(msg: dict):
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
         def do_nothing(params):

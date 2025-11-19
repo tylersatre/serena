@@ -31,8 +31,14 @@ from solidlsp.ls_utils import FileUtils, PathUtils, TextUtils
 from solidlsp.lsp_protocol_handler import lsp_types
 from solidlsp.lsp_protocol_handler import lsp_types as LSPTypes
 from solidlsp.lsp_protocol_handler.lsp_constants import LSPConstants
-from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, DocumentSymbol, LocationLink, SymbolInformation, \
-    RenameParams
+from solidlsp.lsp_protocol_handler.lsp_types import (
+    Definition,
+    DefinitionParams,
+    DocumentSymbol,
+    LocationLink,
+    RenameParams,
+    SymbolInformation,
+)
 from solidlsp.lsp_protocol_handler.server import (
     LSPError,
     ProcessLaunchInfo,

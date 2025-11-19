@@ -64,6 +64,7 @@ class ScalaLanguageServer(SolidLanguageServer):
         os.makedirs(metals_home, exist_ok=True)
         metals_executable = os.path.join(metals_home, "metals")
         coursier_command_path = shutil.which("coursier")
+        assert coursier_command_path is not None, "coursier is not installed or not in PATH."
         cs_command_path = shutil.which("cs")
 
         if not os.path.exists(metals_executable):
@@ -152,9 +153,9 @@ class ScalaLanguageServer(SolidLanguageServer):
             },
             "capabilities": {"textDocument": {"documentSymbol": {"hierarchicalDocumentSymbolSupport": True}}},
         }
-        return initialize_params
+        return initialize_params  # type: ignore
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the Scala Language Server
         """

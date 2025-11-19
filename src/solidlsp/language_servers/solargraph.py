@@ -1,3 +1,4 @@
+# type: ignore
 """
 Provides Ruby specific instantiation of the LanguageServer class using Solargraph.
 Contains various configurations and settings specific to Ruby.

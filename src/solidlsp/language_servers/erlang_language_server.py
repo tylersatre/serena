@@ -1,3 +1,4 @@
+# type: ignore
 """Erlang Language Server implementation using Erlang LS."""
 
 import logging

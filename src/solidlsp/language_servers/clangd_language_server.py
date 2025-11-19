@@ -196,7 +196,7 @@ class ClangdLanguageServer(SolidLanguageServer):
             if params["quiescent"] == True:
                 self.server_ready.set()
 
-        def window_log_message(msg: Any) -> None:
+        def window_log_message(msg: dict) -> None:
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
         self.server.on_request("client/registerCapability", register_capability_handler)
