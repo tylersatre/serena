@@ -200,6 +200,7 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
         lang_name_mapping = {"javascript": "typescript"}
         languages: list[Language] = []
         for language_str in data["languages"]:
+            orig_language_str = language_str
             try:
                 language_str = language_str.lower()
                 if language_str in lang_name_mapping:
@@ -207,7 +208,9 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
                 language = Language(language_str)
                 languages.append(language)
             except ValueError as e:
-                raise ValueError(f"Invalid language: {data['language']}.\nValid language_strings are: {[l.value for l in Language]}") from e
+                raise ValueError(
+                    f"Invalid language: {orig_language_str}.\nValid language_strings are: {[l.value for l in Language]}"
+                ) from e
 
         return cls(
             project_name=data["project_name"],
