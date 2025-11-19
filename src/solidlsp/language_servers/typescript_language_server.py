@@ -69,6 +69,11 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             "coverage",
         ]
 
+    @staticmethod
+    def _determine_log_level(line: str) -> int:
+        """Classify typescript-language-server stderr output to avoid false-positive errors."""
+        return SolidLanguageServer._determine_log_level(line)
+
     @classmethod
     def _setup_runtime_dependencies(
         cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
