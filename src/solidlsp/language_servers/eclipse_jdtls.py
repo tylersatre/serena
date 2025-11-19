@@ -14,11 +14,11 @@ from typing import cast
 
 from overrides import override
 
-from solidlsp.ls import GenericDocumentSymbol, LSPFileBuffer, SolidLanguageServer
+from solidlsp.ls import LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformUtils
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+from solidlsp.lsp_protocol_handler.lsp_types import DocumentSymbol, InitializeParams, SymbolInformation
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -789,14 +789,18 @@ class EclipseJDTLS(SolidLanguageServer):
         # TODO: Add comments about why we wait here, and how this can be optimized
         self.service_ready_event.wait()
 
-    def _request_document_symbols(self, relative_file_path: str, file_data: LSPFileBuffer | None) -> list[GenericDocumentSymbol]:
+    def _request_document_symbols(
+        self, relative_file_path: str, file_data: LSPFileBuffer | None
+    ) -> list[SymbolInformation] | list[DocumentSymbol] | None:
         result = super()._request_document_symbols(relative_file_path, file_data=file_data)
+        if result is None:
+            return None
 
         # JDTLS sometimes returns symbol names with type information to handle overloads,
         # e.g. "myMethod(int) <T>", but we want overloads to be handled via overload_idx,
         # which requires the name to be just "myMethod".
 
-        def fix_name(symbol: GenericDocumentSymbol):
+        def fix_name(symbol: SymbolInformation | DocumentSymbol) -> None:
             if "(" in symbol["name"]:
                 symbol["name"] = symbol["name"][: symbol["name"].index("(")]
             children = symbol.get("children")

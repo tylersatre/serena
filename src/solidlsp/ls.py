@@ -9,7 +9,7 @@ import subprocess
 import threading
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from collections.abc import Iterator
+from collections.abc import Hashable, Iterator
 from contextlib import contextmanager
 from copy import copy
 from pathlib import Path, PurePath
@@ -31,7 +31,7 @@ from solidlsp.ls_utils import FileUtils, PathUtils, TextUtils
 from solidlsp.lsp_protocol_handler import lsp_types
 from solidlsp.lsp_protocol_handler import lsp_types as LSPTypes
 from solidlsp.lsp_protocol_handler.lsp_constants import LSPConstants
-from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, LocationLink
+from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, DocumentSymbol, LocationLink, SymbolInformation
 from solidlsp.lsp_protocol_handler.server import (
     LSPError,
     ProcessLaunchInfo,
@@ -238,7 +238,7 @@ class SolidLanguageServer(ABC):
         process_launch_info: ProcessLaunchInfo,
         language_id: str,
         solidlsp_settings: SolidLSPSettings,
-        cache_version_raw_document_symbols: int = 1,
+        cache_version_raw_document_symbols: Hashable = 1,
     ):
         """
         Initializes a LanguageServer instance.
@@ -283,7 +283,7 @@ class SolidLanguageServer(ABC):
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         # * raw document symbols cache
         self._ls_specific_raw_document_symbols_cache_version = cache_version_raw_document_symbols
-        self._raw_document_symbols_cache: dict[str, tuple[str, list[GenericDocumentSymbol]]] = {}
+        self._raw_document_symbols_cache: dict[str, tuple[str, list[DocumentSymbol] | list[SymbolInformation] | None]] = {}
         """maps relative file paths to a tuple of (file_content_hash, raw_root_symbols)"""
         self._raw_document_symbols_cache_is_modified: bool = False
         self._load_raw_document_symbols_cache()
@@ -819,9 +819,9 @@ class SolidLanguageServer(ABC):
                 "severity": item["severity"],
                 "message": item["message"],
                 "range": item["range"],
-                "code": item["code"],
+                "code": item["code"],  # type: ignore
             }
-            ret.append(ls_types.Diagnostic(new_item))
+            ret.append(ls_types.Diagnostic(**new_item))
 
         return ret
 
@@ -943,7 +943,9 @@ class SolidLanguageServer(ABC):
 
             return [json.loads(json_repr) for json_repr in set(json.dumps(item, sort_keys=True) for item in completions_list)]
 
-    def _request_document_symbols(self, relative_file_path: str, file_data: LSPFileBuffer | None) -> list[GenericDocumentSymbol]:
+    def _request_document_symbols(
+        self, relative_file_path: str, file_data: LSPFileBuffer | None
+    ) -> list[SymbolInformation] | list[DocumentSymbol] | None:
         """
         Sends a [documentSymbol](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_documentSymbol)
         request to the language server to find symbols in the given file - or returns a cached result if available.
@@ -953,7 +955,7 @@ class SolidLanguageServer(ABC):
         :return: the list of root symbols in the file.
         """
 
-        def get_cached_raw_document_symbols(cache_key: str, fd: LSPFileBuffer) -> list[GenericDocumentSymbol] | None:
+        def get_cached_raw_document_symbols(cache_key: str, fd: LSPFileBuffer) -> list[SymbolInformation] | list[DocumentSymbol] | None:
             file_hash_and_result = self._raw_document_symbols_cache.get(cache_key)
             if file_hash_and_result is not None:
                 file_hash, result = file_hash_and_result
@@ -966,7 +968,7 @@ class SolidLanguageServer(ABC):
                 log.debug("No cache hit for raw document symbols symbols in %s", relative_file_path)
             return None
 
-        def get_raw_document_symbols(fd: LSPFileBuffer) -> list[GenericDocumentSymbol]:
+        def get_raw_document_symbols(fd: LSPFileBuffer) -> list[SymbolInformation] | list[DocumentSymbol] | None:
             # check for cached result
             cache_key = relative_file_path
             response = get_cached_raw_document_symbols(cache_key, fd)
@@ -980,7 +982,7 @@ class SolidLanguageServer(ABC):
             )
 
             # update cache
-            self._raw_document_symbols_cache[cache_key] = (file_data.content_hash, response)
+            self._raw_document_symbols_cache[cache_key] = (fd.content_hash, response)
             self._raw_document_symbols_cache_is_modified = True
 
             return response
@@ -1059,9 +1061,9 @@ class SolidLanguageServer(ABC):
                     item["location"] = tree_location
                 location = item["location"]
                 if "absolutePath" not in location:
-                    location["absolutePath"] = absolute_path
+                    location["absolutePath"] = absolute_path  # type: ignore
                 if "relativePath" not in location:
-                    location["relativePath"] = relative_file_path
+                    location["relativePath"] = relative_file_path  # type: ignore
 
                 if "body" not in item:
                     item["body"] = self.retrieve_symbol_body(item, file_lines=file_lines)
@@ -1076,16 +1078,17 @@ class SolidLanguageServer(ABC):
                 return item
 
             def convert_symbols_with_common_parent(
-                symbols: list[GenericDocumentSymbol], parent: ls_types.UnifiedSymbolInformation | None
+                symbols: list[DocumentSymbol] | list[SymbolInformation] | list[UnifiedSymbolInformation],
+                parent: ls_types.UnifiedSymbolInformation | None,
             ) -> list[ls_types.UnifiedSymbolInformation]:
                 """
                 Converts the given symbols into UnifiedSymbolInformation with proper parent-child relationships,
                 adding overload indices for symbols with the same name under the same parent.
                 """
-                total_name_counts = defaultdict(lambda: 0)
+                total_name_counts: dict[str, int] = defaultdict(lambda: 0)
                 for symbol in symbols:
                     total_name_counts[symbol["name"]] += 1
-                name_counts = defaultdict(lambda: 0)
+                name_counts: dict[str, int] = defaultdict(lambda: 0)
                 unified_symbols = []
                 for symbol in symbols:
                     usymbol = convert_to_unified_symbol(symbol)
@@ -1094,9 +1097,9 @@ class SolidLanguageServer(ABC):
                     name_counts[usymbol["name"]] += 1
                     usymbol["parent"] = parent
                     if "children" in usymbol:
-                        usymbol["children"] = convert_symbols_with_common_parent(usymbol["children"], usymbol)
+                        usymbol["children"] = convert_symbols_with_common_parent(usymbol["children"], usymbol)  # type: ignore
                     else:
-                        usymbol["children"] = []
+                        usymbol["children"] = []  # type: ignore
                     unified_symbols.append(usymbol)
                 return unified_symbols
 
@@ -1356,7 +1359,7 @@ class SolidLanguageServer(ABC):
 
     def retrieve_symbol_body(
         self,
-        symbol: ls_types.UnifiedSymbolInformation | LSPTypes.DocumentSymbol | LSPTypes.SymbolInformation,
+        symbol: ls_types.UnifiedSymbolInformation | LSPTypes.SymbolInformation,
         file_lines: list[str] | None = None,
         file_buffer: LSPFileBuffer | None = None,
     ) -> str:
@@ -1372,7 +1375,7 @@ class SolidLanguageServer(ABC):
         symbol_end_line = symbol["location"]["range"]["end"]["line"]
         assert "relativePath" in symbol["location"]
         if file_lines is None:
-            with self._open_file_context(symbol["location"]["relativePath"], file_buffer) as f:
+            with self._open_file_context(symbol["location"]["relativePath"], file_buffer) as f:  # type: ignore
                 file_lines = f.split_lines()
         symbol_body = "\n".join(file_lines[symbol_start_line : symbol_end_line + 1])
 
@@ -1706,7 +1709,7 @@ class SolidLanguageServer(ABC):
 
         return defining_symbol
 
-    def _save_raw_document_symbols_cache(self):
+    def _save_raw_document_symbols_cache(self) -> None:
         cache_file = self.cache_dir / self.RAW_DOCUMENT_SYMBOL_CACHE_FILENAME
 
         if not self._raw_document_symbols_cache_is_modified:
@@ -1724,10 +1727,10 @@ class SolidLanguageServer(ABC):
                 e,
             )
 
-    def _raw_document_symbols_cache_version(self):
+    def _raw_document_symbols_cache_version(self) -> tuple[int, Hashable]:
         return (self.RAW_DOCUMENT_SYMBOLS_CACHE_VERSION, self._ls_specific_raw_document_symbols_cache_version)
 
-    def _load_raw_document_symbols_cache(self):
+    def _load_raw_document_symbols_cache(self) -> None:
         cache_file = self.cache_dir / self.RAW_DOCUMENT_SYMBOL_CACHE_FILENAME
 
         if not cache_file.exists():
@@ -1747,7 +1750,7 @@ class SolidLanguageServer(ABC):
                             migrated_cache[new_cache_key] = (file_hash, root_symbols)
                             num_symbols_migrated += len(all_symbols)
                     log.info("Migrated %d document symbols from legacy cache", num_symbols_migrated)
-                    self._raw_document_symbols_cache = migrated_cache
+                    self._raw_document_symbols_cache = migrated_cache  # type: ignore
                     self._raw_document_symbols_cache_is_modified = True
                     self._save_raw_document_symbols_cache()
                     legacy_cache_file.unlink()
@@ -1774,7 +1777,7 @@ class SolidLanguageServer(ABC):
                     e,
                 )
 
-    def _save_document_symbols_cache(self):
+    def _save_document_symbols_cache(self) -> None:
         cache_file = self.cache_dir / self.DOCUMENT_SYMBOL_CACHE_FILENAME
 
         if not self._document_symbols_cache_is_modified:
@@ -1792,7 +1795,7 @@ class SolidLanguageServer(ABC):
                 e,
             )
 
-    def _load_document_symbols_cache(self):
+    def _load_document_symbols_cache(self) -> None:
         cache_file = self.cache_dir / self.DOCUMENT_SYMBOL_CACHE_FILENAME
         if cache_file.exists():
             log.info("Loading document symbols cache from %s", cache_file)
@@ -1809,7 +1812,7 @@ class SolidLanguageServer(ABC):
                     e,
                 )
 
-    def save_cache(self):
+    def save_cache(self) -> None:
         self._save_raw_document_symbols_cache()
         self._save_document_symbols_cache()
 
