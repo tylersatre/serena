@@ -141,15 +141,15 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
                 # determine languages automatically
                 language_composition = determine_programming_language_composition(str(project_root))
                 if len(language_composition) == 0:
+                    language_values = ", ".join([lang.value for lang in Language])
                     raise ValueError(
                         f"No source files found in {project_root}\n\n"
-                        f"To use Serena with this project, you need to either:\n"
-                        f"1. Add source files in one of the supported languages (Python, JavaScript/TypeScript, Java, C#, Rust, Go, Ruby, C++, PHP, Swift, Elixir, Terraform, Bash)\n"
-                        f"2. Create a project configuration file manually at:\n"
-                        f"   {os.path.join(project_root, cls.rel_path_to_project_yml())}\n\n"
-                        f"Example project.yml:\n"
-                        f"  project_name: {project_name}\n"
-                        f"  language: python  # or typescript, java, csharp, rust, go, ruby, cpp, php, swift, elixir, terraform, bash\n"
+                        f"To use Serena with this project, you need to either\n"
+                        f"  1. specify a programming language by adding parameters --language <language>\n"
+                        f"     when creating the project via the Serena CLI command OR\n"
+                        f"  2. add source files in one of the supported languages first.\n\n"
+                        f"Supported languages are: {language_values}\n"
+                        f"Read the documentation for more information."
                     )
                 # sort languages by number of files found
                 languages_and_percentages = sorted(language_composition.items(), key=lambda item: item[1], reverse=True)
