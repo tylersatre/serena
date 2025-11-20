@@ -37,7 +37,7 @@ from typing import Any, Union
 from .lsp_types import ErrorCodes
 
 StringDict = dict[str, Any]
-PayloadLike = Union[list[StringDict], StringDict, None]
+PayloadLike = Union[list[StringDict], StringDict, None, bool]
 CONTENT_LENGTH = "Content-Length: "
 ENCODING = "utf-8"
 log = logging.getLogger(__name__)
