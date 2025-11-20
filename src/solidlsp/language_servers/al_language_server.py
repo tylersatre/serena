@@ -8,7 +8,6 @@ import stat
 import time
 import zipfile
 from pathlib import Path
-from typing import cast
 
 import requests
 from overrides import override
@@ -17,7 +16,7 @@ from solidlsp.language_servers.common import quote_windows_path
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
-from solidlsp.ls_types import UnifiedSymbolInformation
+from solidlsp.ls_types import SymbolKind, UnifiedSymbolInformation
 from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, LocationLink
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -753,6 +752,7 @@ class ALLanguageServer(SolidLanguageServer):
         # Collect all symbols from all files
         all_file_symbols: list[UnifiedSymbolInformation] = []
 
+        file_symbol: UnifiedSymbolInformation
         for file_path, relative_path in al_files:
             try:
                 # Use our overridden request_document_symbols which handles opening
@@ -761,38 +761,32 @@ class ALLanguageServer(SolidLanguageServer):
 
                 if root_syms:
                     # Create a file-level symbol containing the document symbols
-                    file_symbol = cast(
-                        UnifiedSymbolInformation,
-                        {
-                            "name": file_path.stem,  # Just the filename without extension
-                            "kind": 1,  # File
-                            "children": root_syms,
-                            "location": {
-                                "uri": file_path.as_uri(),
-                                "relativePath": relative_path,
-                                "absolutePath": str(file_path),
-                                "range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 0}},
-                            },
+                    file_symbol = {
+                        "name": file_path.stem,  # Just the filename without extension
+                        "kind": SymbolKind.File,
+                        "children": root_syms,
+                        "location": {
+                            "uri": file_path.as_uri(),
+                            "relativePath": relative_path,
+                            "absolutePath": str(file_path),
+                            "range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 0}},
                         },
-                    )
+                    }
                     all_file_symbols.append(file_symbol)
                     self.logger.log(f"AL: Added {len(root_syms)} symbols from {relative_path}", logging.DEBUG)
                 elif all_syms:
                     # If we only got all_syms but not root, use all_syms
-                    file_symbol = cast(
-                        UnifiedSymbolInformation,
-                        {
-                            "name": file_path.stem,
-                            "kind": 1,  # File
-                            "children": all_syms,
-                            "location": {
-                                "uri": file_path.as_uri(),
-                                "relativePath": relative_path,
-                                "absolutePath": str(file_path),
-                                "range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 0}},
-                            },
+                    file_symbol = {
+                        "name": file_path.stem,
+                        "kind": SymbolKind.File,
+                        "children": all_syms,
+                        "location": {
+                            "uri": file_path.as_uri(),
+                            "relativePath": relative_path,
+                            "absolutePath": str(file_path),
+                            "range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 0}},
                         },
-                    )
+                    }
                     all_file_symbols.append(file_symbol)
                     self.logger.log(f"AL: Added {len(all_syms)} symbols from {relative_path}", logging.DEBUG)
 
@@ -833,7 +827,7 @@ class ALLanguageServer(SolidLanguageServer):
                     # Create directory symbol
                     dir_symbol = {
                         "name": Path(dir_path).name,
-                        "kind": 4,  # Package/Directory
+                        "kind": SymbolKind.Package,  # Package/Directory
                         "children": file_symbols,
                         "location": {
                             "relativePath": dir_path,

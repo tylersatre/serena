@@ -146,6 +146,8 @@ class CompletionItem(TypedDict):
 class SymbolKind(IntEnum):
     """A symbol kind."""
 
+    # TODO: This is a duplicate of SymbolKind in lsp_types.
+
     File = 1
     Module = 2
     Namespace = 3
