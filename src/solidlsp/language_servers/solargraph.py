@@ -1,4 +1,3 @@
-# type: ignore
 """
 Provides Ruby specific instantiation of the LanguageServer class using Solargraph.
 Contains various configurations and settings specific to Ruby.
@@ -12,7 +11,6 @@ import re
 import shutil
 import subprocess
 import threading
-from typing import cast
 
 from overrides import override
 
@@ -136,7 +134,7 @@ class Solargraph(SolidLanguageServer):
                     if bundle_cmd.startswith("bin/"):
                         bundle_full_path = os.path.join(repository_root_path, bundle_cmd)
                     else:
-                        bundle_full_path = find_executable_with_extensions(bundle_cmd)
+                        bundle_full_path = find_executable_with_extensions(bundle_cmd)  # type: ignore[assignment]
                     if bundle_full_path and os.path.exists(bundle_full_path):
                         bundle_path = bundle_full_path if bundle_cmd.startswith("bin/") else bundle_cmd
                         break
@@ -284,7 +282,7 @@ class Solargraph(SolidLanguageServer):
             "rootPath": repository_absolute_path,
             "rootUri": root_uri,
             "initializationOptions": {
-                "exclude": exclude_patterns,
+                "exclude": exclude_patterns,  # type: ignore[dict-item]
             },
             "capabilities": {
                 "workspace": {
@@ -293,11 +291,11 @@ class Solargraph(SolidLanguageServer):
                 "textDocument": {
                     "documentSymbol": {
                         "hierarchicalDocumentSymbolSupport": True,
-                        "symbolKind": {"valueSet": list(range(1, 27))},
+                        "symbolKind": {"valueSet": list(range(1, 27))},  # type: ignore[arg-type]
                     },
                 },
             },
-            "trace": "verbose",
+            "trace": "verbose",  # type: ignore[typeddict-item]
             "workspaceFolders": [
                 {
                     "uri": root_uri,
@@ -305,7 +303,7 @@ class Solargraph(SolidLanguageServer):
                 }
             ],
         }
-        return cast(InitializeParams, initialize_params)
+        return initialize_params  # type: ignore[return-value]
 
     def _start_server(self) -> None:
         """
@@ -320,7 +318,7 @@ class Solargraph(SolidLanguageServer):
                     self.resolve_main_method_available.set()
             return
 
-        def lang_status_handler(params):
+        def lang_status_handler(params: dict) -> None:
             self.logger.log(f"LSP: language/status: {params}", logging.INFO)
             if params.get("type") == "ServiceReady" and params.get("message") == "Service is ready.":
                 self.logger.log("Solargraph service is ready.", logging.INFO)
