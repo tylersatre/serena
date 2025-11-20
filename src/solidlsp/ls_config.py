@@ -222,7 +222,7 @@ class Language(str, Enum):
 
                 return RubyLsp
             case self.RUBY_SOLARGRAPH:
-                from solidlsp.language_servers.solargraph import Solargraph  # type: ignore
+                from solidlsp.language_servers.solargraph import Solargraph
 
                 return Solargraph
             case self.DART:
@@ -250,7 +250,7 @@ class Language(str, Enum):
 
                 return ElixirTools
             case self.ELM:
-                from solidlsp.language_servers.elm_language_server import ElmLanguageServer  # type: ignore
+                from solidlsp.language_servers.elm_language_server import ElmLanguageServer
 
                 return ElmLanguageServer
             case self.TERRAFORM:
@@ -258,7 +258,7 @@ class Language(str, Enum):
 
                 return TerraformLS
             case self.SWIFT:
-                from solidlsp.language_servers.sourcekit_lsp import SourceKitLSP  # type: ignore
+                from solidlsp.language_servers.sourcekit_lsp import SourceKitLSP
 
                 return SourceKitLSP
             case self.BASH:
@@ -270,7 +270,7 @@ class Language(str, Enum):
 
                 return YamlLanguageServer
             case self.ZIG:
-                from solidlsp.language_servers.zls import ZigLanguageServer  # type: ignore
+                from solidlsp.language_servers.zls import ZigLanguageServer
 
                 return ZigLanguageServer
             case self.NIX:
@@ -278,15 +278,15 @@ class Language(str, Enum):
 
                 return NixLanguageServer
             case self.LUA:
-                from solidlsp.language_servers.lua_ls import LuaLanguageServer  # type: ignore
+                from solidlsp.language_servers.lua_ls import LuaLanguageServer
 
                 return LuaLanguageServer
             case self.ERLANG:
-                from solidlsp.language_servers.erlang_language_server import ErlangLanguageServer  # type: ignore
+                from solidlsp.language_servers.erlang_language_server import ErlangLanguageServer
 
                 return ErlangLanguageServer
             case self.AL:
-                from solidlsp.language_servers.al_language_server import ALLanguageServer  # type: ignore
+                from solidlsp.language_servers.al_language_server import ALLanguageServer
 
                 return ALLanguageServer
             case self.REGO:
@@ -294,7 +294,7 @@ class Language(str, Enum):
 
                 return RegalLanguageServer
             case self.MARKDOWN:
-                from solidlsp.language_servers.marksman import Marksman  # type: ignore
+                from solidlsp.language_servers.marksman import Marksman
 
                 return Marksman
             case self.R:
@@ -310,7 +310,7 @@ class Language(str, Enum):
 
                 return JuliaLanguageServer
             case self.FORTRAN:
-                from solidlsp.language_servers.fortran_language_server import FortranLanguageServer  # type: ignore
+                from solidlsp.language_servers.fortran_language_server import FortranLanguageServer
 
                 return FortranLanguageServer
             case self.HASKELL:
