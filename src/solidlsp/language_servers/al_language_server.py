@@ -16,6 +16,7 @@ from solidlsp.language_servers.common import quote_windows_path
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_types import SymbolKind, UnifiedSymbolInformation
 from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, LocationLink
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -485,7 +486,7 @@ class ALLanguageServer(SolidLanguageServer):
         return initialize_params
 
     @override
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the AL Language Server process and initializes it.
 
@@ -495,19 +496,19 @@ class ALLanguageServer(SolidLanguageServer):
         """
 
         # Set up event handlers
-        def do_nothing(params):
+        def do_nothing(params: str) -> None:
             return
 
-        def window_log_message(msg):
+        def window_log_message(msg: str) -> None:
             self.logger.log(f"AL LSP: window/logMessage: {msg}", logging.INFO)
 
-        def publish_diagnostics(params):
+        def publish_diagnostics(params: dict) -> None:
             # AL server publishes diagnostics during initialization
             uri = params.get("uri", "")
             diagnostics = params.get("diagnostics", [])
             self.logger.log(f"AL LSP: Diagnostics for {uri}: {len(diagnostics)} issues", logging.DEBUG)
 
-        def handle_al_notifications(params):
+        def handle_al_notifications(params: dict) -> None:
             # AL server sends custom notifications during project loading
             self.logger.log("AL LSP: Notification received", logging.DEBUG)
 
@@ -635,8 +636,8 @@ class ALLanguageServer(SolidLanguageServer):
                         "workspacePath": self.repository_root_path,
                         "setActiveWorkspace": True,
                     },
+                    "timeout": 2,  # Quick timeout since this is optional
                 },
-                timeout=2,  # Quick timeout since this is optional
             )
             self.logger.log(f"Set active workspace result: {result}", logging.DEBUG)
         except Exception as e:
@@ -680,7 +681,7 @@ class ALLanguageServer(SolidLanguageServer):
         return super().is_ignored_dirname(dirname) or dirname in al_ignore_dirs
 
     @override
-    def request_full_symbol_tree(self, within_relative_path: str | None = None) -> list[dict]:
+    def request_full_symbol_tree(self, within_relative_path: str | None = None) -> list[UnifiedSymbolInformation]:
         """
         Override to handle AL's requirement of opening files before requesting symbols.
 
@@ -749,8 +750,9 @@ class ALLanguageServer(SolidLanguageServer):
             return []
 
         # Collect all symbols from all files
-        all_file_symbols = []
+        all_file_symbols: list[UnifiedSymbolInformation] = []
 
+        file_symbol: UnifiedSymbolInformation
         for file_path, relative_path in al_files:
             try:
                 # Use our overridden request_document_symbols which handles opening
@@ -761,7 +763,7 @@ class ALLanguageServer(SolidLanguageServer):
                     # Create a file-level symbol containing the document symbols
                     file_symbol = {
                         "name": file_path.stem,  # Just the filename without extension
-                        "kind": 1,  # File
+                        "kind": SymbolKind.File,
                         "children": root_syms,
                         "location": {
                             "uri": file_path.as_uri(),
@@ -776,7 +778,7 @@ class ALLanguageServer(SolidLanguageServer):
                     # If we only got all_syms but not root, use all_syms
                     file_symbol = {
                         "name": file_path.stem,
-                        "kind": 1,  # File
+                        "kind": SymbolKind.File,
                         "children": all_syms,
                         "location": {
                             "uri": file_path.as_uri(),
@@ -795,10 +797,11 @@ class ALLanguageServer(SolidLanguageServer):
             self.logger.log(f"AL: Returning symbols from {len(all_file_symbols)} files", logging.DEBUG)
 
             # Group files by directory
-            directory_structure = {}
+            directory_structure: dict[str, list] = {}
 
             for file_symbol in all_file_symbols:
                 rel_path = file_symbol["location"]["relativePath"]
+                assert rel_path is not None
                 path_parts = rel_path.split("/")
 
                 if len(path_parts) > 1:
@@ -824,7 +827,7 @@ class ALLanguageServer(SolidLanguageServer):
                     # Create directory symbol
                     dir_symbol = {
                         "name": Path(dir_path).name,
-                        "kind": 4,  # Package/Directory
+                        "kind": SymbolKind.Package,  # Package/Directory
                         "children": file_symbols,
                         "location": {
                             "relativePath": dir_path,
@@ -860,7 +863,7 @@ class ALLanguageServer(SolidLanguageServer):
             # Use custom AL command instead of standard LSP
             response = self.server.send_request("al/gotodefinition", al_params)
             self.logger.log(f"AL gotodefinition response: {response}", logging.DEBUG)
-            return response
+            return response  # type: ignore[return-value]
         except Exception as e:
             self.logger.log(f"Failed to use al/gotodefinition, falling back to standard: {e}", logging.WARNING)
             # Fallback to standard LSP method if custom command fails
@@ -889,7 +892,7 @@ class ALLanguageServer(SolidLanguageServer):
 
         try:
             # Use a very short timeout since this is just a status check
-            response = self.server.send_request("al/hasProjectClosureLoadedRequest", {}, timeout=1)
+            response = self.server.send_request("al/hasProjectClosureLoadedRequest", {"timeout": 1})
             # Response can be boolean directly, dict with 'loaded' field, or None
             if isinstance(response, bool):
                 return response

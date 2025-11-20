@@ -4,6 +4,7 @@ import pathlib
 import platform
 import shutil
 import subprocess
+from typing import Any
 
 from overrides import override
 
@@ -30,6 +31,7 @@ class JuliaLanguageServer(SolidLanguageServer):
         julia_executable = self._setup_runtime_dependency(logger)  # PASS LOGGER
         julia_code = "using LanguageServer; runserver()"
 
+        julia_ls_cmd: str | list[str]
         if platform.system() == "Windows":
             # On Windows, pass as list (Serena handles shell=True differently)
             julia_ls_cmd = [julia_executable, "--startup-file=no", "--history-file=no", "-e", julia_code, repository_root_path]
@@ -147,15 +149,15 @@ class JuliaLanguageServer(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params
+        return initialize_params  # type: ignore
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """Start the LanguageServer.jl server process."""
 
-        def do_nothing(params):
+        def do_nothing(params: Any) -> None:
             return
 
-        def window_log_message(msg):
+        def window_log_message(msg: dict) -> None:
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
         self.server.on_notification("window/logMessage", window_log_message)

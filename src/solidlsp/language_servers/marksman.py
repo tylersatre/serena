@@ -130,9 +130,9 @@ class Marksman(SolidLanguageServer):
                     "documentSymbol": {
                         "dynamicRegistration": True,
                         "hierarchicalDocumentSymbolSupport": True,
-                        "symbolKind": {"valueSet": list(range(1, 27))},
+                        "symbolKind": {"valueSet": list(range(1, 27))},  # type: ignore[arg-type]
                     },
-                    "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
+                    "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},  # type: ignore[list-item]
                     "codeAction": {"dynamicRegistration": True},
                 },
                 "workspace": {
@@ -150,18 +150,18 @@ class Marksman(SolidLanguageServer):
         }
         return initialize_params
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the Marksman Language Server and waits for it to be ready.
         """
 
-        def register_capability_handler(_params):
+        def register_capability_handler(_params: dict) -> None:
             return
 
-        def window_log_message(msg):
+        def window_log_message(msg: dict) -> None:
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
-        def do_nothing(_params):
+        def do_nothing(_params: dict) -> None:
             return
 
         self.server.on_request("client/registerCapability", register_capability_handler)

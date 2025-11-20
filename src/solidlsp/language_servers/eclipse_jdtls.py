@@ -10,14 +10,16 @@ import shutil
 import threading
 import uuid
 from pathlib import PurePath
+from typing import cast
 
 from overrides import override
 
-from solidlsp.ls import GenericDocumentSymbol, LSPFileBuffer, SolidLanguageServer
+from solidlsp.ls import LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_types import UnifiedSymbolInformation
 from solidlsp.ls_utils import FileUtils, PlatformUtils
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+from solidlsp.lsp_protocol_handler.lsp_types import DocumentSymbol, InitializeParams, SymbolInformation
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -690,29 +692,29 @@ class EclipseJDTLS(SolidLanguageServer):
             ],
         }
 
-        initialize_params["initializationOptions"]["workspaceFolders"] = [repo_uri]
+        initialize_params["initializationOptions"]["workspaceFolders"] = [repo_uri]  # type: ignore
         bundles = [self.runtime_dependency_paths.intellicode_jar_path]
-        initialize_params["initializationOptions"]["bundles"] = bundles
-        initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"] = [
+        initialize_params["initializationOptions"]["bundles"] = bundles  # type: ignore
+        initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"] = [  # type: ignore
             {"name": "JavaSE-21", "path": self.runtime_dependency_paths.jre_home_path, "default": True}
         ]
 
-        for runtime in initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"]:
+        for runtime in initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"]:  # type: ignore
             assert "name" in runtime
             assert "path" in runtime
             assert os.path.exists(runtime["path"]), f"Runtime required for eclipse_jdtls at path {runtime['path']} does not exist"
 
-        gradle_settings = initialize_params["initializationOptions"]["settings"]["java"]["import"]["gradle"]
+        gradle_settings = initialize_params["initializationOptions"]["settings"]["java"]["import"]["gradle"]  # type: ignore
         gradle_settings["home"] = self.runtime_dependency_paths.gradle_path
         gradle_settings["java"]["home"] = self.runtime_dependency_paths.jre_path
-        return initialize_params
+        return cast(InitializeParams, initialize_params)
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the Eclipse JDTLS Language Server
         """
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             assert "registrations" in params
             for registration in params["registrations"]:
                 if registration["method"] == "textDocument/completion":
@@ -730,22 +732,22 @@ class EclipseJDTLS(SolidLanguageServer):
                         self.intellicode_enable_command_available.set()
             return
 
-        def lang_status_handler(params):
+        def lang_status_handler(params: dict) -> None:
             # TODO: Should we wait for
             # server -> client: {'jsonrpc': '2.0', 'method': 'language/status', 'params': {'type': 'ProjectStatus', 'message': 'OK'}}
             # Before proceeding?
             if params["type"] == "ServiceReady" and params["message"] == "ServiceReady":
                 self.service_ready_event.set()
 
-        def execute_client_command_handler(params):
+        def execute_client_command_handler(params: dict) -> list:
             assert params["command"] == "_java.reloadBundles.command"
             assert params["arguments"] == []
             return []
 
-        def window_log_message(msg):
+        def window_log_message(msg: dict) -> None:
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
         self.server.on_request("client/registerCapability", register_capability_handler)
@@ -765,13 +767,13 @@ class EclipseJDTLS(SolidLanguageServer):
             logging.INFO,
         )
         init_response = self.server.send.initialize(initialize_params)
-        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2
+        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2  # type: ignore
         assert "completionProvider" not in init_response["capabilities"]
         assert "executeCommandProvider" not in init_response["capabilities"]
 
         self.server.notify.initialized({})
 
-        self.server.notify.workspace_did_change_configuration({"settings": initialize_params["initializationOptions"]["settings"]})
+        self.server.notify.workspace_did_change_configuration({"settings": initialize_params["initializationOptions"]["settings"]})  # type: ignore
 
         self.intellicode_enable_command_available.wait()
 
@@ -788,19 +790,23 @@ class EclipseJDTLS(SolidLanguageServer):
         # TODO: Add comments about why we wait here, and how this can be optimized
         self.service_ready_event.wait()
 
-    def _request_document_symbols(self, relative_file_path: str, file_data: LSPFileBuffer | None) -> list[GenericDocumentSymbol]:
+    def _request_document_symbols(
+        self, relative_file_path: str, file_data: LSPFileBuffer | None
+    ) -> list[SymbolInformation] | list[DocumentSymbol] | None:
         result = super()._request_document_symbols(relative_file_path, file_data=file_data)
+        if result is None:
+            return None
 
         # JDTLS sometimes returns symbol names with type information to handle overloads,
         # e.g. "myMethod(int) <T>", but we want overloads to be handled via overload_idx,
         # which requires the name to be just "myMethod".
 
-        def fix_name(symbol: GenericDocumentSymbol):
+        def fix_name(symbol: SymbolInformation | DocumentSymbol | UnifiedSymbolInformation) -> None:
             if "(" in symbol["name"]:
                 symbol["name"] = symbol["name"][: symbol["name"].index("(")]
             children = symbol.get("children")
             if children:
-                for child in children:
+                for child in children:  # type: ignore
                     fix_name(child)
 
         for root_symbol in result:

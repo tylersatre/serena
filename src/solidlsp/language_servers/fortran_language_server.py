@@ -125,7 +125,7 @@ class FortranLanguageServer(SolidLanguageServer):
 
             # Create modified symbol with corrected selectionRange
             corrected_symbol = symbol.copy()
-            corrected_symbol["selectionRange"] = new_sel_range
+            corrected_symbol["selectionRange"] = new_sel_range  # type: ignore[typeddict-item]
 
             self.logger.log(
                 f"Fixed fortls selectionRange for {identifier_name}: char {start_char} -> {identifier_start}",
@@ -174,7 +174,7 @@ class FortranLanguageServer(SolidLanguageServer):
         return DocumentSymbols(fixed_root_symbols)
 
     @staticmethod
-    def _check_fortls_installation():
+    def _check_fortls_installation() -> str:
         """Check if fortls is available."""
         fortls_path = shutil.which("fortls")
         if fortls_path is None:
@@ -255,18 +255,18 @@ class FortranLanguageServer(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params
+        return initialize_params  # type: ignore[return-value]
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """Start Fortran Language Server process."""
 
-        def window_log_message(msg):
+        def window_log_message(msg: dict) -> None:
             self.logger.log(f"Fortran LSP: window/logMessage: {msg}", logging.INFO)
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             return
 
         # Register LSP message handlers

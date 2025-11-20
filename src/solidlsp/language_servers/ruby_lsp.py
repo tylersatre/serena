@@ -16,7 +16,7 @@ from overrides import override
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams, InitializeResult
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -180,6 +180,7 @@ class RubyLsp(SolidLanguageServer):
             if not bundle_path:
                 # Try common bundle executables
                 for bundle_executable in ["bin/bundle", "bundle"]:
+                    bundle_full_path: str | None
                     if bundle_executable.startswith("bin/"):
                         bundle_full_path = os.path.join(repository_root_path, bundle_executable)
                     else:
@@ -340,7 +341,7 @@ class RubyLsp(SolidLanguageServer):
             },
         }
 
-        return initialize_params
+        return initialize_params  # type: ignore
 
     def _start_server(self) -> None:
         """
@@ -394,7 +395,7 @@ class RubyLsp(SolidLanguageServer):
                         self.analysis_complete.set()
                         self.completions_available.set()
 
-        def window_work_done_progress_create(params: dict) -> None:
+        def window_work_done_progress_create(params: dict) -> dict:
             """Handle workDoneProgress/create requests from ruby-lsp"""
             self.logger.log(f"LSP: window/workDoneProgress/create: {params}", logging.DEBUG)
             return {}
@@ -442,7 +443,7 @@ class RubyLsp(SolidLanguageServer):
             self.analysis_complete.set()
             self.completions_available.set()
 
-    def _handle_initialization_response(self, init_response):
+    def _handle_initialization_response(self, init_response: InitializeResult) -> None:
         """
         Handle the initialization response from ruby-lsp and validate capabilities.
         """

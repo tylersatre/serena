@@ -7,6 +7,7 @@ import os
 import pathlib
 import subprocess
 import threading
+from typing import cast
 
 from overrides import override
 
@@ -40,7 +41,7 @@ class RustAnalyzer(SolidLanguageServer):
         return SolidLanguageServer._determine_log_level(line)
 
     @staticmethod
-    def _get_rustup_version():
+    def _get_rustup_version() -> str | None:
         """Get installed rustup version or None if not found."""
         try:
             result = subprocess.run(["rustup", "--version"], capture_output=True, text=True, check=False)
@@ -51,7 +52,7 @@ class RustAnalyzer(SolidLanguageServer):
         return None
 
     @staticmethod
-    def _get_rust_analyzer_path():
+    def _get_rust_analyzer_path() -> str | None:
         """Get rust-analyzer path via rustup. Returns None if not found."""
         try:
             # Note: we avoid using system PATH to avoid picking up incorrect aliases
@@ -65,8 +66,12 @@ class RustAnalyzer(SolidLanguageServer):
         return None
 
     @staticmethod
-    def _ensure_rust_analyzer_installed():
-        """Ensure rust-analyzer is available, install via rustup if needed."""
+    def _ensure_rust_analyzer_installed() -> str:
+        """
+        Ensure rust-analyzer is available, install via rustup if needed.
+
+        :return: path to rust-analyzer executable
+        """
         path = RustAnalyzer._get_rust_analyzer_path()
         if path:
             return path
@@ -588,14 +593,14 @@ class RustAnalyzer(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params
+        return cast(InitializeParams, initialize_params)
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the Rust Analyzer Language Server
         """
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             assert "registrations" in params
             for registration in params["registrations"]:
                 if registration["method"] == "workspace/executeCommand":
@@ -603,24 +608,24 @@ class RustAnalyzer(SolidLanguageServer):
                     self.resolve_main_method_available.set()
             return
 
-        def lang_status_handler(params):
+        def lang_status_handler(params: dict) -> None:
             # TODO: Should we wait for
             # server -> client: {'jsonrpc': '2.0', 'method': 'language/status', 'params': {'type': 'ProjectStatus', 'message': 'OK'}}
             # Before proceeding?
             if params["type"] == "ServiceReady" and params["message"] == "ServiceReady":
                 self.service_ready_event.set()
 
-        def execute_client_command_handler(params):
+        def execute_client_command_handler(params: dict) -> list:
             return []
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
-        def check_experimental_status(params):
+        def check_experimental_status(params: dict) -> None:
             if params["quiescent"] == True:
                 self.server_ready.set()
 
-        def window_log_message(msg):
+        def window_log_message(msg: dict) -> None:
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
         self.server.on_request("client/registerCapability", register_capability_handler)
@@ -641,7 +646,7 @@ class RustAnalyzer(SolidLanguageServer):
             logging.INFO,
         )
         init_response = self.server.send.initialize(initialize_params)
-        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2
+        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2  # type: ignore
         assert "completionProvider" in init_response["capabilities"]
         assert init_response["capabilities"]["completionProvider"] == {
             "resolveProvider": True,

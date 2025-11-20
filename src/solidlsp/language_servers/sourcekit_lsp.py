@@ -62,7 +62,7 @@ class SourceKitLSP(SolidLanguageServer):
         self.server_ready = threading.Event()
         self.request_id = 0
         self._did_sleep_before_requesting_references = False
-        self._initialization_timestamp = None
+        self._initialization_timestamp: float | None = None
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
@@ -305,18 +305,18 @@ class SourceKitLSP(SolidLanguageServer):
             ],
         }
 
-        return initialize_params
+        return initialize_params  # type: ignore[return-value]
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """Start sourcekit-lsp server process"""
 
-        def register_capability_handler(_params):
+        def register_capability_handler(_params: dict) -> None:
             return
 
-        def window_log_message(msg):
+        def window_log_message(msg: dict) -> None:
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
-        def do_nothing(_params):
+        def do_nothing(_params: dict) -> None:
             return
 
         self.server.on_request("client/registerCapability", register_capability_handler)

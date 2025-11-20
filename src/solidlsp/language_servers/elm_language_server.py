@@ -143,17 +143,17 @@ class ElmLanguageServer(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params
+        return initialize_params  # type: ignore[return-value]
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the Elm Language Server, waits for the server to be ready and yields the LanguageServer instance.
         """
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
-        def window_log_message(msg):
+        def window_log_message(msg: dict) -> None:
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
         self.server.on_notification("window/logMessage", window_log_message)

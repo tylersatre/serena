@@ -35,7 +35,7 @@ class ZigLanguageServer(SolidLanguageServer):
         return super().is_ignored_dirname(dirname) or dirname in ["zig-cache", "zig-out", ".zig-cache", "node_modules", "build", "dist"]
 
     @staticmethod
-    def _get_zig_version():
+    def _get_zig_version() -> str | None:
         """Get the installed Zig version or None if not found."""
         try:
             result = subprocess.run(["zig", "version"], capture_output=True, text=True, check=False)
@@ -46,7 +46,7 @@ class ZigLanguageServer(SolidLanguageServer):
         return None
 
     @staticmethod
-    def _get_zls_version():
+    def _get_zls_version() -> str | None:
         """Get the installed ZLS version or None if not found."""
         try:
             result = subprocess.run(["zls", "--version"], capture_output=True, text=True, check=False)
@@ -57,12 +57,12 @@ class ZigLanguageServer(SolidLanguageServer):
         return None
 
     @staticmethod
-    def _check_zls_installed():
+    def _check_zls_installed() -> bool:
         """Check if ZLS is installed in the system."""
         return shutil.which("zls") is not None
 
     @staticmethod
-    def _setup_runtime_dependency():
+    def _setup_runtime_dependency() -> bool:
         """
         Check if required Zig runtime dependencies are available.
         Raises RuntimeError with helpful message if dependencies are missing.
@@ -188,18 +188,18 @@ class ZigLanguageServer(SolidLanguageServer):
                 "inlay_hints_hide_redundant_param_names_last_token": False,
             },
         }
-        return initialize_params
+        return initialize_params  # type: ignore[return-value]
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """Start ZLS server process"""
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             return
 
-        def window_log_message(msg):
+        def window_log_message(msg: str) -> None:
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
         self.server.on_request("client/registerCapability", register_capability_handler)

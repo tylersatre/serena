@@ -8,6 +8,7 @@ import os
 import pathlib
 import shutil
 import threading
+from typing import Any
 
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
 from solidlsp.ls import SolidLanguageServer
@@ -148,20 +149,20 @@ class YamlLanguageServer(SolidLanguageServer):
                 }
             },
         }
-        return initialize_params
+        return initialize_params  # type: ignore
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the YAML Language Server, waits for the server to be ready and yields the LanguageServer instance.
         """
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: Any) -> None:
             return
 
-        def do_nothing(params):
+        def do_nothing(params: Any) -> None:
             return
 
-        def window_log_message(msg):
+        def window_log_message(msg: str) -> None:
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
         self.server.on_request("client/registerCapability", register_capability_handler)

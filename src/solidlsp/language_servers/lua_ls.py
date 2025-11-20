@@ -37,7 +37,7 @@ class LuaLanguageServer(SolidLanguageServer):
         return super().is_ignored_dirname(dirname) or dirname in [".luarocks", "lua_modules", "node_modules", "build", "dist", ".cache"]
 
     @staticmethod
-    def _get_lua_ls_path():
+    def _get_lua_ls_path() -> str | None:
         """Get the path to lua-language-server executable."""
         # First check if it's in PATH
         lua_ls = shutil.which("lua-language-server")
@@ -69,7 +69,7 @@ class LuaLanguageServer(SolidLanguageServer):
         return None
 
     @staticmethod
-    def _download_lua_ls():
+    def _download_lua_ls() -> str:
         """Download and install lua-language-server if not present."""
         system = platform.system()
         machine = platform.machine().lower()
@@ -140,7 +140,7 @@ class LuaLanguageServer(SolidLanguageServer):
         raise RuntimeError("Failed to find lua-language-server executable after extraction")
 
     @staticmethod
-    def _setup_runtime_dependency():
+    def _setup_runtime_dependency() -> str:
         """
         Check if required Lua runtime dependencies are available.
         Downloads lua-language-server if not present.
@@ -254,18 +254,18 @@ class LuaLanguageServer(SolidLanguageServer):
                 },
             },
         }
-        return initialize_params
+        return initialize_params  # type: ignore[return-value]
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """Start Lua Language Server process"""
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             return
 
-        def window_log_message(msg):
+        def window_log_message(msg: dict) -> None:
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
         self.server.on_request("client/registerCapability", register_capability_handler)

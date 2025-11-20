@@ -3,6 +3,7 @@ import os
 import pathlib
 import subprocess
 import threading
+from typing import Any
 
 from overrides import override
 
@@ -32,7 +33,7 @@ class RLanguageServer(SolidLanguageServer):
         ]
 
     @staticmethod
-    def _check_r_installation():
+    def _check_r_installation() -> None:
         """Check if R and languageserver are available."""
         try:
             # Check R installation
@@ -126,18 +127,18 @@ class RLanguageServer(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params
+        return initialize_params  # type: ignore
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """Start R Language Server process."""
 
-        def window_log_message(msg):
+        def window_log_message(msg: str) -> None:
             self.logger.log(f"R LSP: window/logMessage: {msg}", logging.INFO)
 
-        def do_nothing(params):
+        def do_nothing(params: Any) -> None:
             return
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: Any) -> None:
             return
 
         # Register LSP message handlers

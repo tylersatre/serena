@@ -61,7 +61,7 @@ class ErlangLanguageServer(SolidLanguageServer):
             return False
 
     @classmethod
-    def _get_erlang_version(cls):
+    def _get_erlang_version(cls) -> str | None:
         """Get the installed Erlang/OTP version or None if not found."""
         try:
             result = subprocess.run(["erl", "-version"], check=False, capture_output=True, text=True, timeout=10)
@@ -80,13 +80,13 @@ class ErlangLanguageServer(SolidLanguageServer):
         except (subprocess.SubprocessError, FileNotFoundError):
             return False
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """Start Erlang LS server process with proper initialization waiting."""
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             return
 
-        def window_log_message(msg):
+        def window_log_message(msg: dict) -> None:
             """Handle window/logMessage notifications from Erlang LS"""
             message_text = msg.get("message", "")
             self.logger.log(f"LSP: window/logMessage: {message_text}", logging.INFO)
@@ -109,10 +109,10 @@ class ErlangLanguageServer(SolidLanguageServer):
                     self.server_ready.set()
                     break
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
-        def check_server_ready(params):
+        def check_server_ready(params: dict) -> None:
             """Handle $/progress notifications from Erlang LS as fallback."""
             value = params.get("value", {})
 
@@ -154,7 +154,7 @@ class ErlangLanguageServer(SolidLanguageServer):
         }
 
         self.logger.log("Sending initialize request to Erlang LS", logging.INFO)
-        init_response = self.server.send.initialize(initialize_params)
+        init_response = self.server.send.initialize(initialize_params)  # type: ignore[arg-type]
 
         # Verify server capabilities
         if "capabilities" in init_response:

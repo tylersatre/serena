@@ -274,7 +274,7 @@ class Language(str, Enum):
 
                 return ZigLanguageServer
             case self.NIX:
-                from solidlsp.language_servers.nixd_ls import NixLanguageServer
+                from solidlsp.language_servers.nixd_ls import NixLanguageServer  # type: ignore
 
                 return NixLanguageServer
             case self.LUA:
@@ -350,7 +350,7 @@ class LanguageServerConfig:
     """File encoding to use when reading source files"""
 
     @classmethod
-    def from_dict(cls, env: dict):
+    def from_dict(cls, env: dict) -> Self:
         """
         Create a MultilspyConfig instance from a dictionary
         """

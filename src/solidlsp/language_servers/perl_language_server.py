@@ -9,6 +9,7 @@ import os
 import pathlib
 import subprocess
 import time
+from typing import Any
 
 from overrides import override
 
@@ -16,7 +17,7 @@ from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import PlatformId, PlatformUtils
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+from solidlsp.lsp_protocol_handler.lsp_types import DidChangeConfigurationParams, InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -27,7 +28,7 @@ class PerlLanguageServer(SolidLanguageServer):
     """
 
     @staticmethod
-    def _get_perl_version():
+    def _get_perl_version() -> str | None:
         """Get the installed Perl version or None if not found."""
         try:
             result = subprocess.run(["perl", "-v"], capture_output=True, text=True, check=False)
@@ -38,7 +39,7 @@ class PerlLanguageServer(SolidLanguageServer):
         return None
 
     @staticmethod
-    def _get_perl_language_server_version():
+    def _get_perl_language_server_version() -> str | None:
         """Get the installed Perl::LanguageServer version or None if not found."""
         try:
             result = subprocess.run(
@@ -147,21 +148,21 @@ class PerlLanguageServer(SolidLanguageServer):
             ],
         }
 
-        return initialize_params
+        return initialize_params  # type: ignore
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """Start Perl::LanguageServer process"""
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: Any) -> None:
             return
 
-        def window_log_message(msg):
+        def window_log_message(msg: str) -> None:
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
-        def do_nothing(params):
+        def do_nothing(params: Any) -> None:
             return
 
-        def workspace_configuration_handler(params):
+        def workspace_configuration_handler(params: Any) -> Any:
             """Handle workspace/configuration request from Perl::LanguageServer."""
             self.logger.log(f"Received workspace/configuration request: {params}", logging.INFO)
 
@@ -203,7 +204,7 @@ class PerlLanguageServer(SolidLanguageServer):
         # Send workspace configuration to Perl::LanguageServer
         # Perl::LanguageServer requires didChangeConfiguration to set perlInc, fileFilter, and ignoreDirs
         # See: Perl::LanguageServer::Methods::workspace::_rpcnot_didChangeConfiguration
-        perl_config = {
+        perl_config: DidChangeConfigurationParams = {
             "settings": {
                 "perl": {
                     "perlInc": [self.repository_root_path, "."],
