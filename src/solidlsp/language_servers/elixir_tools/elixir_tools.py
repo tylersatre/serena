@@ -26,6 +26,10 @@ class ElixirTools(SolidLanguageServer):
     """
 
     @override
+    def _get_wait_time_for_cross_file_referencing(self) -> float:
+        return 10.0  # Elixir projects need a lot of time to compile and index before cross-file references work
+
+    @override
     def is_ignored_dirname(self, dirname: str) -> bool:
         # For Elixir projects, we should ignore:
         # - _build: compiled artifacts
@@ -44,7 +48,8 @@ class ElixirTools(SolidLanguageServer):
 
         return super().is_ignored_path(relative_path, ignore_unsupported_files)
 
-    def _is_next_ls_internal_file(self, abs_path: str) -> bool:
+    @staticmethod
+    def _is_next_ls_internal_file(abs_path: str) -> bool:
         """Check if an absolute path is a Next LS internal file that should be ignored."""
         return any(
             pattern in abs_path
