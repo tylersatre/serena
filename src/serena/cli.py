@@ -441,8 +441,11 @@ class ProjectCommands(AutoRegisteringGroup):
                     raise ValueError(f"Unknown language '{lang}'. Supported: {all_langs}")
 
         generated_conf = ProjectConfig.autogenerate(
-            project_root=project_path, project_name=name, languages=languages if languages else None
+            project_root=project_path, project_name=name, languages=languages if languages else None, interactive=True
         )
+        yml_path = ProjectConfig.path_to_project_yml(project_path)
+        languages_str = ", ".join([lang.value for lang in generated_conf.languages]) if generated_conf.languages else "N/A"
+        click.echo(f"Generated project with languages {{{languages_str}}} at {yml_path}.")
         return generated_conf
 
     @staticmethod
@@ -462,10 +465,7 @@ class ProjectCommands(AutoRegisteringGroup):
     @click.option("--timeout", type=float, default=10, help="Timeout for indexing a single file (only used if --index is set).")
     def create(project_path: str, name: str | None, language: tuple[str, ...], index: bool, log_level: str, timeout: float) -> None:
         try:
-            generated_conf = ProjectCommands._create_project(project_path, name, language)
-            yml_path = os.path.join(project_path, ProjectConfig.rel_path_to_project_yml())
-            click.echo(f"Generated project.yml with languages {generated_conf.languages} at {yml_path}.")
-
+            ProjectCommands._create_project(project_path, name, language)
             if index:
                 click.echo("Indexing project...")
                 ProjectCommands._index_project(project_path, log_level, timeout=timeout)
@@ -497,8 +497,7 @@ class ProjectCommands(AutoRegisteringGroup):
         if not os.path.exists(yml_path):
             click.echo(f"Project configuration not found at {yml_path}. Auto-creating...")
             try:
-                generated_conf = ProjectCommands._create_project(project, name, language)
-                click.echo(f"Generated project.yml with languages {generated_conf.languages} at {yml_path}.")
+                ProjectCommands._create_project(project, name, language)
             except FileExistsError:
                 # Race condition - file was created between check and creation
                 pass
