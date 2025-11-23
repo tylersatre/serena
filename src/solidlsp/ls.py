@@ -249,12 +249,11 @@ class SolidLanguageServer(ABC):
 
         Do not instantiate this class directly. Use `LanguageServer.create` method instead.
 
-        :param config: The Multilspy configuration.
-        :param repository_root_path: The root path of the repository.
-        :param process_launch_info: Each language server has a specific command used to start the server.
-                    This parameter is the command to launch the language server process.
-                    The command must pass appropriate flags to the binary, so that it runs in the stdio mode,
-                    as opposed to HTTP, TCP modes supported by some language servers.
+        :param config: the global SolidLSP configuration.
+        :param repository_root_path: the root path of the repository.
+        :param process_launch_info: the command used to start the actual language server.
+            The command must pass appropriate flags to the binary, so that it runs in the stdio mode,
+            as opposed to HTTP, TCP modes supported by some language servers.
         :param cache_version_raw_document_symbols: the version, for caching, of the raw document symbols coming
             from this specific language server. This should be incremented by subclasses calling this constructor
             whenever the format of the raw document symbols changes (typically because the language server
@@ -343,10 +342,11 @@ class SolidLanguageServer(ABC):
         self.server.set_request_timeout(timeout)
 
     def get_ignore_spec(self) -> pathspec.PathSpec:
-        """Returns the pathspec matcher for the paths that were configured to be ignored through
-        the multilspy config.
+        """
+        Returns the pathspec matcher for the paths that were configured to be ignored through
+        the language server configuration.
 
-        This is is a subset of the full language-specific ignore spec that determines
+        This is a subset of the full language-specific ignore spec that determines
         which files are relevant for the language server.
 
         This matcher is useful for operations outside of the language server,
@@ -619,7 +619,7 @@ class SolidLanguageServer(ABC):
         :param line: The line number of the symbol
         :param column: The column number of the symbol
 
-        :return List[multilspy_types.Location]: A list of locations where the symbol is defined
+        :return: the list of locations where the symbol is defined
         """
         if not self.server_started:
             log.error("request_definition called before language server started")
@@ -842,7 +842,7 @@ class SolidLanguageServer(ABC):
         :param line: The line number of the symbol
         :param column: The column number of the symbol
 
-        :return List[multilspy_types.CompletionItem]: A list of completions
+        :return: A list of completions
         """
         with self.open_file(relative_file_path):
             open_file_buffer = self.open_file_buffers[pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri()]

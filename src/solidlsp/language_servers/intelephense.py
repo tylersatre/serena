@@ -53,7 +53,7 @@ class Intelephense(SolidLanguageServer):
             PlatformId.WIN_x64,
             PlatformId.WIN_arm64,
         ]
-        assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for multilspy PHP at the moment"
+        assert platform_id in valid_platforms, f"Platform {platform_id} is not supported by {cls.__name__} at the moment"
 
         # Verify both node and npm are installed
         is_node_installed = shutil.which("node") is not None

@@ -223,7 +223,7 @@ class FileUtils:
         """
         try:
             tmp_files = []
-            tmp_file_name = str(PurePath(os.path.expanduser("~"), "multilspy_tmp", uuid.uuid4().hex))
+            tmp_file_name = str(PurePath(os.path.expanduser("~"), "solidlsp_tmp", uuid.uuid4().hex))
             tmp_files.append(tmp_file_name)
             os.makedirs(os.path.dirname(tmp_file_name), exist_ok=True)
             FileUtils.download_file(url, tmp_file_name)
@@ -269,10 +269,6 @@ class FileUtils:
 
 
 class PlatformId(str, Enum):
-    """
-    multilspy supported platforms
-    """
-
     WIN_x86 = "win-x86"
     WIN_x64 = "win-x64"
     WIN_arm64 = "win-arm64"
@@ -290,10 +286,6 @@ class PlatformId(str, Enum):
 
 
 class DotnetVersion(str, Enum):
-    """
-    multilspy supported dotnet versions
-    """
-
     V4 = "4"
     V6 = "6"
     V7 = "7"
