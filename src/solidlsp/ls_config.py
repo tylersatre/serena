@@ -174,8 +174,6 @@ class Language(str, Enum):
             case self.HASKELL:
                 return FilenameMatcher("*.hs", "*.lhs")
             case self.VUE:
-                # Vue projects contain both .vue files and TypeScript support files
-                # Include all TypeScript patterns plus .vue files
                 path_patterns = ["*.vue"]
                 for prefix in ["c", "m", ""]:
                     for postfix in ["x", ""]:

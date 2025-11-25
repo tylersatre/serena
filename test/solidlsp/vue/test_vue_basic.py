@@ -9,11 +9,8 @@ from solidlsp.ls_utils import SymbolUtils
 
 @pytest.mark.vue
 class TestVueLanguageServer:
-    """Test Vue Language Server integration with TypeScript LSP."""
-
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_vue_files_in_symbol_tree(self, language_server: SolidLanguageServer) -> None:
-        """Verify all .vue files are recognized by TypeScript LSP."""
         symbols = language_server.request_full_symbol_tree()
         assert SymbolUtils.symbol_tree_contains_name(symbols, "App"), "App not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "CalculatorButton"), "CalculatorButton not found in symbol tree"
@@ -22,7 +19,6 @@ class TestVueLanguageServer:
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_script_setup_symbol_extraction(self, language_server: SolidLanguageServer) -> None:
-        """Verify symbols extracted from <script setup> sections."""
         app_file = os.path.join("src", "App.vue")
         doc_symbols = language_server.request_document_symbols(app_file).get_all_symbols_and_roots()
         symbol_names = [s.get("name") for s in doc_symbols[0]]
@@ -38,7 +34,6 @@ class TestVueLanguageServer:
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_vue_macros_defineprops_defineemits_defineexpose(self, language_server: SolidLanguageServer) -> None:
-        """Verify Vue 3 compiler macros work."""
         button_file = os.path.join("src", "components", "CalculatorButton.vue")
         doc_symbols = language_server.request_document_symbols(button_file).get_all_symbols_and_roots()
         symbol_names = [s.get("name") for s in doc_symbols[0]]
@@ -55,7 +50,6 @@ class TestVueLanguageServer:
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_template_refs(self, language_server: SolidLanguageServer) -> None:
-        """Verify template refs for HTML elements and component instances."""
         # HTML element ref
         input_file = os.path.join("src", "components", "CalculatorInput.vue")
         input_symbols = language_server.request_document_symbols(input_file).get_all_symbols_and_roots()
@@ -67,7 +61,6 @@ class TestVueLanguageServer:
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_pinia_store_integration(self, language_server: SolidLanguageServer) -> None:
-        """Verify Pinia store definitions and storeToRefs pattern."""
         # Store definition
         store_file = os.path.join("src", "stores", "calculator.ts")
         store_symbols = language_server.request_document_symbols(store_file).get_all_symbols_and_roots()
@@ -83,7 +76,6 @@ class TestVueLanguageServer:
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_typescript_support_files(self, language_server: SolidLanguageServer) -> None:
-        """Verify TypeScript types, composables, and cross-language integration."""
         # Type definitions
         types_file = os.path.join("src", "types", "index.ts")
         types_symbols = language_server.request_document_symbols(types_file).get_all_symbols_and_roots()
@@ -104,7 +96,6 @@ class TestVueLanguageServer:
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_path_alias_resolution(self, language_server: SolidLanguageServer) -> None:
-        """Verify @ path alias resolves correctly (tsconfig.json)."""
         # If @ alias works, App.vue should successfully parse with @ imports
         app_file = os.path.join("src", "App.vue")
         app_symbols = language_server.request_document_symbols(app_file).get_all_symbols_and_roots()
@@ -118,7 +109,6 @@ class TestVueLanguageServer:
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_component_imports(self, language_server: SolidLanguageServer) -> None:
-        """Verify .vue file imports work with @ alias."""
         # Verify App.vue can parse successfully (contains component imports)
         app_file = os.path.join("src", "App.vue")
         app_symbols = language_server.request_document_symbols(app_file).get_all_symbols_and_roots()
@@ -132,7 +122,6 @@ class TestVueLanguageServer:
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_vue_typescript_edge_cases(self, language_server: SolidLanguageServer) -> None:
-        """Verify complex TypeScript patterns in Vue context."""
         input_file = os.path.join("src", "components", "CalculatorInput.vue")
         input_symbols = language_server.request_document_symbols(input_file).get_all_symbols_and_roots()
         input_names = [s.get("name") for s in input_symbols[0]]
@@ -159,7 +148,6 @@ class TestVueLanguageServer:
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_find_referencing_symbols(self, language_server: SolidLanguageServer) -> None:
-        """Verify basic cross-file reference functionality."""
         store_file = os.path.join("src", "stores", "calculator.ts")
         symbols = language_server.request_document_symbols(store_file).get_all_symbols_and_roots()
 
