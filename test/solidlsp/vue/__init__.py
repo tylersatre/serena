@@ -1,0 +1,1 @@
+"""Vue language server tests."""

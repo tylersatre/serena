@@ -60,6 +60,7 @@ class Language(str, Enum):
     JULIA = "julia"
     FORTRAN = "fortran"
     HASKELL = "haskell"
+    VUE = "vue"
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -172,6 +173,15 @@ class Language(str, Enum):
                 )
             case self.HASKELL:
                 return FilenameMatcher("*.hs", "*.lhs")
+            case self.VUE:
+                # Vue projects contain both .vue files and TypeScript support files
+                # Include all TypeScript patterns plus .vue files
+                path_patterns = ["*.vue"]
+                for prefix in ["c", "m", ""]:
+                    for postfix in ["x", ""]:
+                        for base_pattern in ["ts", "js"]:
+                            path_patterns.append(f"*.{prefix}{base_pattern}{postfix}")
+                return FilenameMatcher(*path_patterns)
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -209,6 +219,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.typescript_language_server import TypeScriptLanguageServer
 
                 return TypeScriptLanguageServer
+            case self.VUE:
+                from solidlsp.language_servers.vue_language_server import VueLanguageServer
+
+                return VueLanguageServer
             case self.TYPESCRIPT_VTS:
                 from solidlsp.language_servers.vts_language_server import VtsLanguageServer
 
