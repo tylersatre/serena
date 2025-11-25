@@ -122,13 +122,3 @@ def setup_vue_test_environment():
     test_repo_path = Path(__file__).parent.parent.parent / "resources" / "repos" / "vue" / "test_repo"
     ensure_vue_test_repo_dependencies(str(test_repo_path))
     return str(test_repo_path)
-
-
-@pytest.fixture(scope="session")
-def vue_test_repo_path(setup_vue_test_environment):
-    """Get the path to the prepared Vue test repository.
-
-    This fixture depends on setup_vue_test_environment to ensure dependencies
-    are installed before returning the path.
-    """
-    return setup_vue_test_environment

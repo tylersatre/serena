@@ -27,10 +27,12 @@ import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import PurePath
+from time import sleep
 from typing import Any
 
 from overrides import override
 
+from solidlsp import ls_types
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
 from solidlsp.ls import LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
@@ -54,10 +56,17 @@ class VueLanguageServer(SolidLanguageServer):
     - <script setup lang="ts"> - TypeScript/JavaScript
     - <style> - CSS/SCSS
 
-    This server operates in "takeover mode" (hybridMode: false), meaning it handles
-    both .vue files AND .ts/.js files within Vue projects. This is simpler than
-    running two separate language servers (Vue + TypeScript).
+    This server operates in "hybrid mode" (hybridMode: true), meaning:
+    - Vue LS handles .vue files
+    - TypeScript LS handles .ts/.js files
+    - Cross-file features require forwarding tsserver/request notifications to the
+      companion TypeScript LS and sending responses back to Vue LS.
     """
+
+    # Timeout and wait time constants
+    TS_SERVER_READY_TIMEOUT = 5.0  # Timeout for TypeScript companion server to become ready
+    VUE_SERVER_READY_TIMEOUT = 3.0  # Timeout for Vue language server to become ready
+    VUE_INDEXING_WAIT_TIME = 2.0  # Wait time after opening Vue files for TS server to index them
 
     def __init__(
         self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
@@ -86,6 +95,8 @@ class VueLanguageServer(SolidLanguageServer):
         self._ts_open_file_buffers: dict[str, LSPFileBuffer] = {}
         # Track whether .vue files have been indexed on TypeScript server
         self._vue_files_indexed = False
+        # Track context managers for indexed Vue files (for cleanup on shutdown)
+        self._indexed_vue_contexts: list = []
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
@@ -197,8 +208,9 @@ class VueLanguageServer(SolidLanguageServer):
         We keep the files open on the TypeScript server (don't close them) so they
         remain indexed for the lifetime of the server.
         """
-        if not hasattr(self, "_vue_files_indexed") or not self._vue_files_indexed:
+        if not self._vue_files_indexed:
             if self._ts_server is None:
+                self.logger.log("TypeScript server not available for Vue file indexing", logging.WARNING)
                 return
 
             self.logger.log("Indexing .vue files on TypeScript server for cross-file references", logging.INFO)
@@ -208,10 +220,11 @@ class VueLanguageServer(SolidLanguageServer):
             for vue_file in vue_files:
                 try:
                     # Open each .vue file on the TypeScript server
-                    # We keep files open by entering the context manager without cleanup
+                    # Store context manager for proper cleanup on shutdown
                     ctx = self._open_file_on_ts_server(vue_file)
                     ctx.__enter__()
-                    # Don't call __exit__ - keep the files open on the TS server
+                    # Track context for cleanup - keep files open until server shutdown
+                    self._indexed_vue_contexts.append(ctx)
                 except Exception as e:
                     self.logger.log(f"Failed to open {vue_file} on TS server: {e}", logging.DEBUG)
 
@@ -219,10 +232,22 @@ class VueLanguageServer(SolidLanguageServer):
             self.logger.log("Vue file indexing on TypeScript server complete", logging.INFO)
 
             # Give TypeScript server time to process the opened files
-            from time import sleep
-
-            sleep(2.0)
+            sleep(self._get_vue_indexing_wait_time())
             self.logger.log("Wait period after Vue file indexing complete", logging.DEBUG)
+
+    def _get_vue_indexing_wait_time(self) -> float:
+        """Return the wait time needed for TypeScript server to index Vue files.
+
+        After opening Vue files on the TypeScript server via textDocument/didOpen,
+        the server needs time to parse, analyze, and build indexes for cross-file
+        references. This wait time ensures the indexing completes before we start
+        querying for references.
+
+        Returns:
+            Wait time in seconds
+
+        """
+        return self.VUE_INDEXING_WAIT_TIME
 
     def _send_references_request(self, relative_file_path: str, line: int, column: int) -> list[lsp_types.Location] | None:
         """Send references request to Vue Language Server for .vue files."""
@@ -300,20 +325,12 @@ class VueLanguageServer(SolidLanguageServer):
             # Open the file first (Vue LS may need it to be opened)
             with self.open_file(relative_file_path):
                 # Use the generic send_request method for custom LSP requests
-                import sys
-
-                print("\n\n===== VOLAR FILE REFERENCE REQUEST =====", file=sys.stderr)
-                print(f"File: {relative_file_path}", file=sys.stderr)
-                print(f"URI: {uri}", file=sys.stderr)
-                print(f"Request params: {request_params}", file=sys.stderr)
-                sys.stderr.flush()
+                self.logger.log(f"Sending volar/client/findFileReference for {relative_file_path}", logging.DEBUG)
+                self.logger.log(f"Request params: {request_params}", logging.DEBUG)
 
                 response = self.server.send_request("volar/client/findFileReference", request_params)
 
-                print(f"Response: {response}", file=sys.stderr)
-                print(f"Response type: {type(response)}", file=sys.stderr)
-                print("========================================\n", file=sys.stderr)
-                sys.stderr.flush()
+                self.logger.log(f"Received response type: {type(response)}", logging.DEBUG)
 
             self.logger.log(f"Received file references response: {response}", logging.INFO)
             self.logger.log(f"Response type: {type(response)}", logging.INFO)
@@ -357,23 +374,14 @@ class VueLanguageServer(SolidLanguageServer):
             return ret
 
         except Exception as e:
-            import sys
-            import traceback
-
-            print("\n\n===== VOLAR FILE REFERENCE ERROR =====", file=sys.stderr)
-            print(f"Error: {e}", file=sys.stderr)
-            print("Traceback:", file=sys.stderr)
-            traceback.print_exc(file=sys.stderr)
-            print("======================================\n", file=sys.stderr)
-            sys.stderr.flush()
-
             self.logger.log(
                 f"Error requesting file references for {relative_file_path}: {e}",
                 logging.WARNING,
             )
             return []
 
-    def request_references(self, relative_file_path: str, line: int, column: int) -> list:
+    @override
+    def request_references(self, relative_file_path: str, line: int, column: int) -> list[ls_types.Location]:
         """Request references from appropriate language server.
 
         In hybrid mode (hybridMode: true):
@@ -466,6 +474,7 @@ class VueLanguageServer(SolidLanguageServer):
         return symbol_refs
 
     @contextmanager
+    @override
     def open_file(self, relative_file_path: str) -> Iterator[LSPFileBuffer]:
         """Override to use appropriate language ID for each file type.
 
@@ -597,7 +606,17 @@ class VueLanguageServer(SolidLanguageServer):
 
         The critical options are:
         - typescript.tsdk: Path to TypeScript lib directory
-        - vue.hybridMode: false - Makes Vue LS handle ALL files (takeover mode)
+        - vue.hybridMode: true - Vue LS handles .vue files, TypeScript LS handles .ts/.js files
+
+        In hybrid mode, Vue LS sends tsserver/request notifications for cross-file features
+        which we forward to the companion TypeScript LS.
+
+        NOTE: This method is an instance method (not @staticmethod) because it requires access
+        to self.tsdk_path, which is set during _setup_runtime_dependencies(). The TypeScript
+        SDK path is dynamically determined based on where npm installs the dependencies and
+        must be provided in the initialization parameters. This is a justified deviation from
+        the @staticmethod pattern used by 25 of 30 other language servers. Similar instance
+        method patterns exist in julia, eclipse_jdtls, csharp, intelephense, and ruby_lsp LSs.
         """
         root_uri = pathlib.Path(repository_absolute_path).as_uri()
         initialize_params = {
@@ -645,7 +664,7 @@ class VueLanguageServer(SolidLanguageServer):
                 },
             },
         }
-        return initialize_params  # type: ignore  # type: ignore
+        return initialize_params  # type: ignore
 
     def _get_ts_initialize_params(self, repository_absolute_path: str) -> dict[str, Any]:
         """
@@ -748,7 +767,7 @@ class VueLanguageServer(SolidLanguageServer):
         self._ts_server.notify.initialized({})
 
         # Wait for TypeScript server ready
-        if not self._ts_server_ready.wait(timeout=5.0):
+        if not self._ts_server_ready.wait(timeout=self.TS_SERVER_READY_TIMEOUT):
             self.logger.log("TypeScript server ready signal timeout, proceeding anyway", logging.INFO)
             self._ts_server_ready.set()
         else:
@@ -791,6 +810,24 @@ class VueLanguageServer(SolidLanguageServer):
             self.logger.log(f"Error forwarding tsserver request {method}: {e}", logging.ERROR)
             return None
 
+    def _cleanup_indexed_vue_files(self) -> None:
+        """Clean up context managers for indexed Vue files.
+
+        Properly closes all Vue files that were opened on the TypeScript server
+        during indexing by calling __exit__ on each tracked context manager.
+        """
+        if not self._indexed_vue_contexts:
+            return
+
+        self.logger.log(f"Cleaning up {len(self._indexed_vue_contexts)} indexed Vue file contexts", logging.DEBUG)
+        for ctx in self._indexed_vue_contexts:
+            try:
+                ctx.__exit__(None, None, None)
+            except Exception as e:
+                self.logger.log(f"Error closing indexed Vue file context: {e}", logging.DEBUG)
+
+        self._indexed_vue_contexts.clear()
+
     def _stop_typescript_server(self) -> None:
         """Stop the companion TypeScript Language Server."""
         if self._ts_server is not None:
@@ -803,6 +840,7 @@ class VueLanguageServer(SolidLanguageServer):
             finally:
                 self._ts_server = None
 
+    @override
     def _start_server(self) -> None:
         """
         Starts the Vue Language Server and companion TypeScript LS.
@@ -916,7 +954,7 @@ class VueLanguageServer(SolidLanguageServer):
 
         # Wait for server readiness with timeout
         self.logger.log("Waiting for Vue language server to be ready...", logging.INFO)
-        if not self.server_ready.wait(timeout=3.0):
+        if not self.server_ready.wait(timeout=self.VUE_SERVER_READY_TIMEOUT):
             # Fallback: assume server is ready after timeout
             # Vue language server doesn't always send explicit ready signals
             self.logger.log("Timeout waiting for Vue server ready signal, proceeding anyway", logging.INFO)
@@ -971,5 +1009,6 @@ class VueLanguageServer(SolidLanguageServer):
     @override
     def stop(self, shutdown_timeout: float = 5.0) -> None:
         """Stop both Vue LS and companion TypeScript LS."""
+        self._cleanup_indexed_vue_files()
         self._stop_typescript_server()
         super().stop(shutdown_timeout)
