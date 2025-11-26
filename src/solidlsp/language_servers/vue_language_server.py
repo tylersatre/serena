@@ -15,7 +15,10 @@ from overrides import override
 
 from solidlsp import ls_types
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
-from solidlsp.language_servers.typescript_language_server import TypeScriptLanguageServer
+from solidlsp.language_servers.typescript_language_server import (
+    TypeScriptLanguageServer,
+    prefer_non_node_modules_definition,
+)
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
@@ -709,3 +712,7 @@ class VueLanguageServer(SolidLanguageServer):
         self._cleanup_indexed_vue_files()
         self._stop_typescript_server()
         super().stop(shutdown_timeout)
+
+    @override
+    def _get_preferred_definition(self, definitions: list[ls_types.Location]) -> ls_types.Location:
+        return prefer_non_node_modules_definition(definitions)

@@ -1682,6 +1682,23 @@ class SolidLanguageServer(ABC):
             include_body=include_body,
         )
 
+    def _get_preferred_definition(self, definitions: list[ls_types.Location]) -> ls_types.Location:
+        """
+        Select the preferred definition from a list of definitions.
+
+        When multiple definitions are returned (e.g., both source and type definitions),
+        this method determines which one to use. The base implementation simply returns
+        the first definition.
+
+        Subclasses can override this method to implement language-specific preferences.
+        For example, TypeScript/Vue servers may prefer source files over .d.ts type
+        definition files.
+
+        :param definitions: A non-empty list of definition locations.
+        :return: The preferred definition location.
+        """
+        return definitions[0]
+
     def request_defining_symbol(
         self,
         relative_file_path: str,
@@ -1713,8 +1730,8 @@ class SolidLanguageServer(ABC):
         if not definitions:
             return None
 
-        # Use the first definition location
-        definition = definitions[0]
+        # Select the preferred definition (subclasses can override _get_preferred_definition)
+        definition = self._get_preferred_definition(definitions)
         def_path = definition["relativePath"]
         assert def_path is not None
         def_line = definition["range"]["start"]["line"]

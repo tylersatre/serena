@@ -12,6 +12,7 @@ from typing import Any, cast
 from overrides import override
 from sensai.util.logging import LogTime
 
+from solidlsp import ls_types
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
@@ -36,6 +37,25 @@ else:
 # Conditionally import pwd module (Unix-only)
 if not PlatformUtils.get_platform_id().value.startswith("win"):
     pass
+
+
+def prefer_non_node_modules_definition(definitions: list[ls_types.Location]) -> ls_types.Location:
+    """
+    Select the preferred definition, preferring source files over type definitions.
+
+    TypeScript language servers often return both type definitions (.d.ts files
+    in node_modules) and source definitions. This function prefers:
+    1. Files not in node_modules
+    2. Falls back to first definition if all are in node_modules
+
+    :param definitions: A non-empty list of definition locations.
+    :return: The preferred definition location.
+    """
+    for d in definitions:
+        rel_path = d.get("relativePath", "")
+        if rel_path and "node_modules" not in rel_path:
+            return d
+    return definitions[0]
 
 
 class TypeScriptLanguageServer(SolidLanguageServer):
@@ -261,3 +281,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
     @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:
         return 1
+
+    @override
+    def _get_preferred_definition(self, definitions: list[ls_types.Location]) -> ls_types.Location:
+        return prefer_non_node_modules_definition(definitions)
