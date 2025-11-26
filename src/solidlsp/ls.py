@@ -474,6 +474,14 @@ class SolidLanguageServer(ABC):
     def _start_server(self) -> None:
         pass
 
+    def _get_language_id_for_file(self, relative_file_path: str) -> str:
+        """Return the language ID for a file.
+
+        Override in subclasses to return file-specific language IDs.
+        Default implementation returns self.language_id.
+        """
+        return self.language_id
+
     @contextmanager
     def open_file(self, relative_file_path: str) -> Iterator[LSPFileBuffer]:
         """
@@ -502,13 +510,14 @@ class SolidLanguageServer(ABC):
             contents = FileUtils.read_file(absolute_file_path, self._encoding)
 
             version = 0
-            self.open_file_buffers[uri] = LSPFileBuffer(uri, contents, version, self.language_id, 1)
+            language_id = self._get_language_id_for_file(relative_file_path)
+            self.open_file_buffers[uri] = LSPFileBuffer(uri, contents, version, language_id, 1)
 
             self.server.notify.did_open_text_document(
                 {
                     LSPConstants.TEXT_DOCUMENT: {  # type: ignore
                         LSPConstants.URI: uri,
-                        LSPConstants.LANGUAGE_ID: self.language_id,
+                        LSPConstants.LANGUAGE_ID: language_id,
                         LSPConstants.VERSION: 0,
                         LSPConstants.TEXT: contents,
                     }
@@ -1924,6 +1933,15 @@ class SolidLanguageServer(ABC):
     @property
     def language_server(self) -> Self:
         return self
+
+    @property
+    def handler(self) -> SolidLanguageServerHandler:
+        """Access the underlying language server handler.
+
+        Useful for advanced operations like sending custom commands
+        or registering notification handlers.
+        """
+        return self.server
 
     def is_running(self) -> bool:
         return self.server.is_running()

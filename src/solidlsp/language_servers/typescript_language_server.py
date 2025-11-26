@@ -43,6 +43,10 @@ class TypeScriptLanguageServer(SolidLanguageServer):
     Provides TypeScript specific instantiation of the LanguageServer class. Contains various configurations and settings specific to TypeScript.
     """
 
+    # Version constants - subclasses can override these if needed
+    TYPESCRIPT_VERSION = "5.9.3"
+    TYPESCRIPT_LANGUAGE_SERVER_VERSION = "5.1.3"
+
     def __init__(
         self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
     ):
@@ -100,13 +104,13 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                 RuntimeDependency(
                     id="typescript",
                     description="typescript package",
-                    command=["npm", "install", "--prefix", "./", "typescript@5.5.4"],
+                    command=["npm", "install", "--prefix", "./", f"typescript@{cls.TYPESCRIPT_VERSION}"],
                     platform_id="any",
                 ),
                 RuntimeDependency(
                     id="typescript-language-server",
                     description="typescript-language-server package",
-                    command=["npm", "install", "--prefix", "./", "typescript-language-server@4.3.3"],
+                    command=["npm", "install", "--prefix", "./", f"typescript-language-server@{cls.TYPESCRIPT_LANGUAGE_SERVER_VERSION}"],
                     platform_id="any",
                 ),
             ]
@@ -138,8 +142,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             )
         return [tsserver_executable_path, "--stdio"]
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialize params for the TypeScript Language Server.
         """
@@ -160,6 +163,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                     "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
                     "signatureHelp": {"dynamicRegistration": True},
                     "codeAction": {"dynamicRegistration": True},
+                    "rename": {"dynamicRegistration": True, "prepareSupport": True},
                 },
                 "workspace": {
                     "workspaceFolders": True,
