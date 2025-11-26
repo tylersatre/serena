@@ -142,19 +142,40 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         is_npm_installed = shutil.which("npm") is not None
         assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
 
-        # Verify both node and npm are installed
-        is_node_installed = shutil.which("node") is not None
-        assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-        is_npm_installed = shutil.which("npm") is not None
-        assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
-
-        # Install typescript and typescript-language-server if not already installed
+        # Install typescript and typescript-language-server if not already installed or version mismatch
         tsserver_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "ts-lsp")
         tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", ".bin", "typescript-language-server")
+
+        # Check if installation is needed based on executable AND version
+        version_file = os.path.join(tsserver_ls_dir, ".installed_version")
+        expected_version = f"{cls.TYPESCRIPT_VERSION}_{cls.TYPESCRIPT_LANGUAGE_SERVER_VERSION}"
+
+        needs_install = False
         if not os.path.exists(tsserver_executable_path):
-            logger.log(f"Typescript Language Server executable not found at {tsserver_executable_path}. Installing...", logging.INFO)
+            logger.log(f"Typescript Language Server executable not found at {tsserver_executable_path}.", logging.INFO)
+            needs_install = True
+        elif os.path.exists(version_file):
+            with open(version_file) as f:
+                installed_version = f.read().strip()
+            if installed_version != expected_version:
+                logger.log(
+                    f"TypeScript Language Server version mismatch: installed={installed_version}, expected={expected_version}. Reinstalling...",
+                    logging.INFO,
+                )
+                needs_install = True
+        else:
+            # No version file exists, assume old installation needs refresh
+            logger.log("TypeScript Language Server version file not found. Reinstalling to ensure correct version...", logging.INFO)
+            needs_install = True
+
+        if needs_install:
+            logger.log("Installing TypeScript Language Server dependencies...", logging.INFO)
             with LogTime("Installation of TypeScript language server dependencies", logger=logger.logger):
                 deps.install(logger, tsserver_ls_dir)
+            # Write version marker file
+            with open(version_file, "w") as f:
+                f.write(expected_version)
+            logger.log("TypeScript language server dependencies installed successfully", logging.INFO)
 
         if not os.path.exists(tsserver_executable_path):
             raise FileNotFoundError(

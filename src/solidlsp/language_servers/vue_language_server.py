@@ -449,9 +449,34 @@ class VueLanguageServer(SolidLanguageServer):
 
         tsdk_path = os.path.join(vue_ls_dir, "node_modules", "typescript", "lib")
 
+        # Check if installation is needed based on executables AND version
+        version_file = os.path.join(vue_ls_dir, ".installed_version")
+        expected_version = f"{cls.VUE_LANGUAGE_SERVER_VERSION}_{TypeScriptLanguageServer.TYPESCRIPT_VERSION}_{TypeScriptLanguageServer.TYPESCRIPT_LANGUAGE_SERVER_VERSION}"
+
+        needs_install = False
         if not os.path.exists(vue_executable_path) or not os.path.exists(ts_ls_executable_path):
-            logger.log("Vue/TypeScript Language Server executables not found. Installing...", logging.INFO)
+            logger.log("Vue/TypeScript Language Server executables not found.", logging.INFO)
+            needs_install = True
+        elif os.path.exists(version_file):
+            with open(version_file) as f:
+                installed_version = f.read().strip()
+            if installed_version != expected_version:
+                logger.log(
+                    f"Vue Language Server version mismatch: installed={installed_version}, expected={expected_version}. Reinstalling...",
+                    logging.INFO,
+                )
+                needs_install = True
+        else:
+            # No version file exists, assume old installation needs refresh
+            logger.log("Vue Language Server version file not found. Reinstalling to ensure correct version...", logging.INFO)
+            needs_install = True
+
+        if needs_install:
+            logger.log("Installing Vue/TypeScript Language Server dependencies...", logging.INFO)
             deps.install(logger, vue_ls_dir)
+            # Write version marker file
+            with open(version_file, "w") as f:
+                f.write(expected_version)
             logger.log("Vue language server dependencies installed successfully", logging.INFO)
 
         if not os.path.exists(vue_executable_path):
