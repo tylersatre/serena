@@ -29,8 +29,6 @@ from solidlsp.settings import SolidLSPSettings
 class VueTypeScriptServer(TypeScriptLanguageServer):
     """TypeScript LS configured with @vue/typescript-plugin for Vue file support."""
 
-    VUE_LANGUAGE_SERVER_VERSION = "3.1.5"
-
     _pending_ts_ls_executable: list[str] | None = None
 
     @classmethod
@@ -107,6 +105,7 @@ class VueLanguageServer(SolidLanguageServer):
     TS_SERVER_READY_TIMEOUT = 5.0
     VUE_SERVER_READY_TIMEOUT = 3.0
     VUE_INDEXING_WAIT_TIME = 2.0
+    VUE_LANGUAGE_SERVER_VERSION = "3.1.5"
 
     def __init__(
         self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
@@ -413,7 +412,7 @@ class VueLanguageServer(SolidLanguageServer):
                 RuntimeDependency(
                     id="vue-language-server",
                     description="Vue language server package (Volar)",
-                    command=["npm", "install", "--prefix", "./", f"@vue/language-server@{VueTypeScriptServer.VUE_LANGUAGE_SERVER_VERSION}"],
+                    command=["npm", "install", "--prefix", "./", f"@vue/language-server@{cls.VUE_LANGUAGE_SERVER_VERSION}"],
                     platform_id="any",
                 ),
                 RuntimeDependency(
