@@ -54,6 +54,24 @@ class VueTypeScriptServer(TypeScriptLanguageServer):
             return cls._pending_ts_ls_executable
         return ["typescript-language-server", "--stdio"]
 
+    @override
+    def _get_language_id_for_file(self, relative_file_path: str) -> str:
+        """Return the correct language ID for files.
+
+        Vue files must be opened with language ID "vue" for the @vue/typescript-plugin
+        to process them correctly. The plugin is configured with "languages": ["vue"]
+        in the initialization options.
+        """
+        ext = os.path.splitext(relative_file_path)[1].lower()
+        if ext == ".vue":
+            return "vue"
+        elif ext in (".ts", ".tsx", ".mts", ".cts"):
+            return "typescript"
+        elif ext in (".js", ".jsx", ".mjs", ".cjs"):
+            return "javascript"
+        else:
+            return "typescript"
+
     def __init__(
         self,
         config: LanguageServerConfig,
