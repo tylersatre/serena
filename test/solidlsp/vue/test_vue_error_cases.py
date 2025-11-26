@@ -1,10 +1,3 @@
-"""
-Vue error case and edge case tests.
-
-This module tests error handling and edge cases in the Vue language server,
-ensuring the system handles invalid inputs gracefully without crashing.
-"""
-
 import os
 
 import pytest
@@ -16,20 +9,12 @@ pytestmark = pytest.mark.vue
 
 
 class TestVueInvalidPositions:
-    """Tests for invalid position handling."""
-
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_negative_line_number(self, language_server: SolidLanguageServer) -> None:
-        """Test requesting containing symbol with negative line number.
-
-        Expected behavior: Should return None or empty dict, not crash.
-        """
         file_path = os.path.join("src", "components", "CalculatorInput.vue")
 
-        # Request containing symbol at invalid negative line
         result = language_server.request_containing_symbol(file_path, -1, 0)
 
-        # Should handle gracefully - return None or empty dict
         assert result is None or result == {}, f"Negative line number should return None or empty dict, got: {result}"
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
