@@ -318,7 +318,7 @@ class SolidLanguageServer(ABC):
             # Normalize separators (pathspec expects forward slashes)
             pattern = pattern.replace(os.path.sep, "/")
             processed_patterns.append(pattern)
-        log.debug(f"Processing {len(processed_patterns)} ignored paths from the config", logging.DEBUG)
+        log.debug(f"Processing {len(processed_patterns)} ignored paths from the config")
 
         # Create a pathspec matcher from the processed patterns
         self._ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, processed_patterns)
