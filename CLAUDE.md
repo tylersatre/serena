@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `uv run poe type-check` - Run mypy type checking - ONLY allowed type checking command  
 - `uv run poe test` - Run tests with default markers (excludes java/rust by default)
 - `uv run poe test -m "python or go"` - Run specific language tests
+- `uv run poe test -m vue` - Run Vue tests
 - `uv run poe lint` - Check code style without fixing
 
 **Test Markers:**
@@ -100,7 +101,7 @@ Configuration is loaded from (in order of precedence):
 - **Symbol-based editing** - Uses LSP for precise code manipulation
 - **Caching strategy** - Reduces language server overhead
 - **Error recovery** - Automatic language server restart on crashes
-- **Multi-language support** - 17+ languages with LSP integration
+- **Multi-language support** - 19 languages with LSP integration (including Vue)
 - **MCP protocol** - Exposes tools to AI agents via Model Context Protocol
 - **Async operation** - Non-blocking language server interactions
 

@@ -28,7 +28,7 @@ class FilenameMatcher:
 
 class Language(str, Enum):
     """
-    Possible languages with Multilspy.
+    Enumeration of language servers supported by SolidLSP.
     """
 
     CSHARP = "csharp"
@@ -37,6 +37,7 @@ class Language(str, Enum):
     JAVA = "java"
     KOTLIN = "kotlin"
     TYPESCRIPT = "typescript"
+    VUE = "vue"
     GO = "go"
     RUBY = "ruby"
     DART = "dart"
@@ -113,6 +114,8 @@ class Language(str, Enum):
                         for base_pattern in ["ts", "js"]:
                             path_patterns.append(f"*.{prefix}{base_pattern}{postfix}")
                 return FilenameMatcher(*path_patterns)
+            case self.VUE:
+                return FilenameMatcher("*.vue")
             case self.CSHARP | self.CSHARP_OMNISHARP:
                 return FilenameMatcher("*.cs")
             case self.RUST:
@@ -225,6 +228,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.vts_language_server import VtsLanguageServer
 
                 return VtsLanguageServer
+            case self.VUE:
+                from solidlsp.language_servers.vue_language_server import VueLanguageServer
+
+                return VueLanguageServer
             case self.GO:
                 from solidlsp.language_servers.gopls import Gopls
 
@@ -363,9 +370,6 @@ class LanguageServerConfig:
 
     @classmethod
     def from_dict(cls, env: dict) -> Self:
-        """
-        Create a MultilspyConfig instance from a dictionary
-        """
         import inspect
 
         return cls(**{k: v for k, v in env.items() if k in inspect.signature(cls).parameters})

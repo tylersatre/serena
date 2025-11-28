@@ -15,13 +15,14 @@ from sensai.util.logging import LogTime
 from solidlsp import ls_types
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
+
+log = logging.getLogger(__name__)
 
 # Platform-specific imports
 if os.name != "nt":  # Unix-like systems
@@ -67,16 +68,13 @@ class TypeScriptLanguageServer(SolidLanguageServer):
     TYPESCRIPT_VERSION = "5.9.3"
     TYPESCRIPT_LANGUAGE_SERVER_VERSION = "5.1.3"
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates a TypeScriptLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        ts_lsp_executable_path = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
+        ts_lsp_executable_path = self._setup_runtime_dependencies(config, solidlsp_settings)
         super().__init__(
             config,
-            logger,
             repository_root_path,
             ProcessLaunchInfo(cmd=ts_lsp_executable_path, cwd=repository_root_path),
             "typescript",
@@ -100,9 +98,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         return SolidLanguageServer._determine_log_level(line)
 
     @classmethod
-    def _setup_runtime_dependencies(
-        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
-    ) -> list[str]:
+    def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> list[str]:
         """
         Setup runtime dependencies for TypeScript Language Server and return the command to start the server.
         """
@@ -152,30 +148,27 @@ class TypeScriptLanguageServer(SolidLanguageServer):
 
         needs_install = False
         if not os.path.exists(tsserver_executable_path):
-            logger.log(f"Typescript Language Server executable not found at {tsserver_executable_path}.", logging.INFO)
+            log.info(f"Typescript Language Server executable not found at {tsserver_executable_path}.")
             needs_install = True
         elif os.path.exists(version_file):
             with open(version_file) as f:
                 installed_version = f.read().strip()
             if installed_version != expected_version:
-                logger.log(
-                    f"TypeScript Language Server version mismatch: installed={installed_version}, expected={expected_version}. Reinstalling...",
-                    logging.INFO,
-                )
+                log.info(f"TypeScript Language Server version mismatch: installed={installed_version}, expected={expected_version}. Reinstalling...")
                 needs_install = True
         else:
             # No version file exists, assume old installation needs refresh
-            logger.log("TypeScript Language Server version file not found. Reinstalling to ensure correct version...", logging.INFO)
+            log.info("TypeScript Language Server version file not found. Reinstalling to ensure correct version...")
             needs_install = True
 
         if needs_install:
-            logger.log("Installing TypeScript Language Server dependencies...", logging.INFO)
-            with LogTime("Installation of TypeScript language server dependencies", logger=logger.logger):
-                deps.install(logger, tsserver_ls_dir)
+            log.info("Installing TypeScript Language Server dependencies...")
+            with LogTime("Installation of TypeScript language server dependencies", logger=log):
+                deps.install(tsserver_ls_dir)
             # Write version marker file
             with open(version_file, "w") as f:
                 f.write(expected_version)
-            logger.log("TypeScript language server dependencies installed successfully", logging.INFO)
+            log.info("TypeScript language server dependencies installed successfully")
 
         if not os.path.exists(tsserver_executable_path):
             raise FileNotFoundError(
@@ -255,7 +248,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             return
 
         def window_log_message(msg: dict) -> None:
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+            log.info(f"LSP: window/logMessage: {msg}")
 
         def check_experimental_status(params: dict) -> None:
             """
@@ -272,13 +265,12 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_notification("experimental/serverStatus", check_experimental_status)
 
-        self.logger.log("Starting TypeScript server process", logging.INFO)
+        log.info("Starting TypeScript server process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
+        log.info(
             "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
         )
         init_response = self.server.send.initialize(initialize_params)
 
@@ -292,9 +284,9 @@ class TypeScriptLanguageServer(SolidLanguageServer):
 
         self.server.notify.initialized({})
         if self.server_ready.wait(timeout=1.0):
-            self.logger.log("TypeScript server is ready", logging.INFO)
+            log.info("TypeScript server is ready")
         else:
-            self.logger.log("Timeout waiting for TypeScript server to become ready, proceeding anyway", logging.INFO)
+            log.info("Timeout waiting for TypeScript server to become ready, proceeding anyway")
             # Fallback: assume server is ready after timeout
             self.server_ready.set()
         self.completions_available.set()
