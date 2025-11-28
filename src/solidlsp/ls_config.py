@@ -37,7 +37,6 @@ class Language(str, Enum):
     JAVA = "java"
     KOTLIN = "kotlin"
     TYPESCRIPT = "typescript"
-    VUE = "vue"
     GO = "go"
     RUBY = "ruby"
     DART = "dart"
@@ -114,8 +113,6 @@ class Language(str, Enum):
                         for base_pattern in ["ts", "js"]:
                             path_patterns.append(f"*.{prefix}{base_pattern}{postfix}")
                 return FilenameMatcher(*path_patterns)
-            case self.VUE:
-                return FilenameMatcher("*.vue")
             case self.CSHARP | self.CSHARP_OMNISHARP:
                 return FilenameMatcher("*.cs")
             case self.RUST:
@@ -220,10 +217,6 @@ class Language(str, Enum):
                 from solidlsp.language_servers.typescript_language_server import TypeScriptLanguageServer
 
                 return TypeScriptLanguageServer
-            case self.VUE:
-                from solidlsp.language_servers.vue_language_server import VueLanguageServer
-
-                return VueLanguageServer
             case self.TYPESCRIPT_VTS:
                 from solidlsp.language_servers.vts_language_server import VtsLanguageServer
 

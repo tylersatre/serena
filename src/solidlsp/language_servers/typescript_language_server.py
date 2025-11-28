@@ -154,7 +154,9 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             with open(version_file) as f:
                 installed_version = f.read().strip()
             if installed_version != expected_version:
-                log.info(f"TypeScript Language Server version mismatch: installed={installed_version}, expected={expected_version}. Reinstalling...")
+                log.info(
+                    f"TypeScript Language Server version mismatch: installed={installed_version}, expected={expected_version}. Reinstalling..."
+                )
                 needs_install = True
         else:
             # No version file exists, assume old installation needs refresh
