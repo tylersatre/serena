@@ -1,3 +1,4 @@
+import logging
 import os
 
 import pytest
@@ -5,6 +6,10 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
+
+# Set up logging for debug output
+log = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(name)s - %(levelname)s - %(message)s")
 
 
 @pytest.mark.vue
@@ -20,26 +25,45 @@ class TestVueLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_find_referencing_symbols(self, language_server: SolidLanguageServer) -> None:
         store_file = os.path.join("src", "stores", "calculator.ts")
+        log.info(f"[TEST-DEBUG] test_find_referencing_symbols: store_file={store_file}")
+        log.info(f"[TEST-DEBUG] test_find_referencing_symbols: repository_root_path={language_server.repository_root_path}")
+
         symbols = language_server.request_document_symbols(store_file).get_all_symbols_and_roots()
+        log.info(f"[TEST-DEBUG] test_find_referencing_symbols: Got {len(symbols[0])} symbols from document")
 
         # Find useCalculatorStore function
         store_symbol = None
         for sym in symbols[0]:
+            log.info(f"[TEST-DEBUG] test_find_referencing_symbols: Found symbol: {sym.get('name')}")
             if sym.get("name") == "useCalculatorStore":
                 store_symbol = sym
                 break
 
         assert store_symbol is not None, "useCalculatorStore function not found"
+        log.info("[TEST-DEBUG] test_find_referencing_symbols: Found useCalculatorStore symbol")
+        log.info(f"[TEST-DEBUG] test_find_referencing_symbols: store_symbol={store_symbol}")
 
         # Get references
         sel_start = store_symbol["selectionRange"]["start"]
+        log.info(
+            f"[TEST-DEBUG] test_find_referencing_symbols: Requesting references at line={sel_start['line']}, character={sel_start['character']}"
+        )
+
         refs = language_server.request_references(store_file, sel_start["line"], sel_start["character"])
+
+        log.info(f"[TEST-DEBUG] test_find_referencing_symbols: Got {len(refs)} references")
+        for i, ref in enumerate(refs):
+            log.info(f"[TEST-DEBUG] test_find_referencing_symbols: ref[{i}]: uri={ref.get('uri', 'N/A')}")
+            log.info(f"[TEST-DEBUG] test_find_referencing_symbols: ref[{i}]: relativePath={ref.get('relativePath', 'N/A')}")
+            log.info(f"[TEST-DEBUG] test_find_referencing_symbols: ref[{i}]: absolutePath={ref.get('absolutePath', 'N/A')}")
+            log.info(f"[TEST-DEBUG] test_find_referencing_symbols: ref[{i}]: range={ref.get('range', 'N/A')}")
 
         # Should have multiple references: definition + usage in App.vue, CalculatorInput.vue, CalculatorDisplay.vue
         assert len(refs) >= 4, f"useCalculatorStore should have at least 4 references (definition + 3 usages), got {len(refs)}"
 
         # Verify we have references from .vue files
         vue_refs = [ref for ref in refs if ".vue" in ref.get("relativePath", "")]
+        log.info(f"[TEST-DEBUG] test_find_referencing_symbols: Vue refs count={len(vue_refs)}")
         assert len(vue_refs) >= 3, f"Should have at least 3 Vue component references, got {len(vue_refs)}"
 
 

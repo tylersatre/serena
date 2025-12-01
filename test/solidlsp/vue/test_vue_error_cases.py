@@ -1,9 +1,14 @@
+import logging
 import os
 
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+
+# Set up logging for debug output
+log = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(name)s - %(levelname)s - %(message)s")
 
 pytestmark = pytest.mark.vue
 
@@ -71,16 +76,25 @@ class TestVueInvalidPositions:
         from solidlsp.ls_exceptions import SolidLSPException
 
         file_path = os.path.join("src", "components", "CalculatorInput.vue")
+        log.info(f"[TEST-DEBUG] test_references_at_negative_line: file_path={file_path}")
+        log.info("[TEST-DEBUG] test_references_at_negative_line: Calling request_references with line=-1, col=0")
 
         # Request references at invalid negative line
         # TypeScript server will raise an exception for this
-        with pytest.raises(SolidLSPException) as exc_info:
-            language_server.request_references(file_path, -1, 0)
-
-        # Verify it's the expected error
-        assert "Bad line number" in str(exc_info.value) or "Debug Failure" in str(
-            exc_info.value
-        ), f"Expected TypeScript 'Bad line number' error, got: {exc_info.value}"
+        try:
+            result = language_server.request_references(file_path, -1, 0)
+            log.info("[TEST-DEBUG] test_references_at_negative_line: NO EXCEPTION RAISED!")
+            log.info(f"[TEST-DEBUG] test_references_at_negative_line: Result type={type(result)}")
+            log.info(f"[TEST-DEBUG] test_references_at_negative_line: Result={result}")
+            # If we get here on Windows, it means no exception was raised - fail the test with debug info
+            pytest.fail(f"Expected SolidLSPException but got result: {result}")
+        except SolidLSPException as e:
+            log.info(f"[TEST-DEBUG] test_references_at_negative_line: Got SolidLSPException: {e}")
+            # Verify it's the expected error
+            assert "Bad line number" in str(e) or "Debug Failure" in str(e), f"Expected TypeScript 'Bad line number' error, got: {e}"
+        except Exception as e:
+            log.info(f"[TEST-DEBUG] test_references_at_negative_line: Got OTHER exception: {type(e).__name__}: {e}")
+            raise
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_definition_at_invalid_position(self, language_server: SolidLanguageServer) -> None:
@@ -91,16 +105,25 @@ class TestVueInvalidPositions:
         from solidlsp.ls_exceptions import SolidLSPException
 
         file_path = os.path.join("src", "components", "CalculatorInput.vue")
+        log.info(f"[TEST-DEBUG] test_definition_at_invalid_position: file_path={file_path}")
+        log.info("[TEST-DEBUG] test_definition_at_invalid_position: Calling request_definition with line=-1, col=0")
 
         # Request definition at invalid position (negative line)
         # TypeScript server will raise an exception for this
-        with pytest.raises(SolidLSPException) as exc_info:
-            language_server.request_definition(file_path, -1, 0)
-
-        # Verify it's the expected error
-        assert "Bad line number" in str(exc_info.value) or "Debug Failure" in str(
-            exc_info.value
-        ), f"Expected TypeScript 'Bad line number' error, got: {exc_info.value}"
+        try:
+            result = language_server.request_definition(file_path, -1, 0)
+            log.info("[TEST-DEBUG] test_definition_at_invalid_position: NO EXCEPTION RAISED!")
+            log.info(f"[TEST-DEBUG] test_definition_at_invalid_position: Result type={type(result)}")
+            log.info(f"[TEST-DEBUG] test_definition_at_invalid_position: Result={result}")
+            # If we get here on Windows, it means no exception was raised - fail the test with debug info
+            pytest.fail(f"Expected SolidLSPException but got result: {result}")
+        except SolidLSPException as e:
+            log.info(f"[TEST-DEBUG] test_definition_at_invalid_position: Got SolidLSPException: {e}")
+            # Verify it's the expected error
+            assert "Bad line number" in str(e) or "Debug Failure" in str(e), f"Expected TypeScript 'Bad line number' error, got: {e}"
+        except Exception as e:
+            log.info(f"[TEST-DEBUG] test_definition_at_invalid_position: Got OTHER exception: {type(e).__name__}: {e}")
+            raise
 
 
 class TestVueNonExistentFiles:
@@ -376,16 +399,25 @@ class TestVueReferenceEdgeCases:
         from solidlsp.ls_exceptions import SolidLSPException
 
         file_path = os.path.join("src", "stores", "calculator.ts")
+        log.info(f"[TEST-DEBUG] test_referencing_symbols_at_invalid_position: file_path={file_path}")
+        log.info("[TEST-DEBUG] test_referencing_symbols_at_invalid_position: Calling request_referencing_symbols with line=-1, col=-1")
 
         # Request referencing symbols at invalid position
         # TypeScript server will raise an exception for this
-        with pytest.raises(SolidLSPException) as exc_info:
-            list(language_server.request_referencing_symbols(file_path, -1, -1, include_self=False))
-
-        # Verify it's the expected error
-        assert "Bad line number" in str(exc_info.value) or "Debug Failure" in str(
-            exc_info.value
-        ), f"Expected TypeScript 'Bad line number' error, got: {exc_info.value}"
+        try:
+            result = list(language_server.request_referencing_symbols(file_path, -1, -1, include_self=False))
+            log.info("[TEST-DEBUG] test_referencing_symbols_at_invalid_position: NO EXCEPTION RAISED!")
+            log.info(f"[TEST-DEBUG] test_referencing_symbols_at_invalid_position: Result type={type(result)}")
+            log.info(f"[TEST-DEBUG] test_referencing_symbols_at_invalid_position: Result={result}")
+            # If we get here on Windows, it means no exception was raised - fail the test with debug info
+            pytest.fail(f"Expected SolidLSPException but got result: {result}")
+        except SolidLSPException as e:
+            log.info(f"[TEST-DEBUG] test_referencing_symbols_at_invalid_position: Got SolidLSPException: {e}")
+            # Verify it's the expected error
+            assert "Bad line number" in str(e) or "Debug Failure" in str(e), f"Expected TypeScript 'Bad line number' error, got: {e}"
+        except Exception as e:
+            log.info(f"[TEST-DEBUG] test_referencing_symbols_at_invalid_position: Got OTHER exception: {type(e).__name__}: {e}")
+            raise
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_defining_symbol_at_invalid_position(self, language_server: SolidLanguageServer) -> None:
@@ -396,16 +428,25 @@ class TestVueReferenceEdgeCases:
         from solidlsp.ls_exceptions import SolidLSPException
 
         file_path = os.path.join("src", "components", "CalculatorInput.vue")
+        log.info(f"[TEST-DEBUG] test_defining_symbol_at_invalid_position: file_path={file_path}")
+        log.info("[TEST-DEBUG] test_defining_symbol_at_invalid_position: Calling request_defining_symbol with line=-1, col=-1")
 
         # Request defining symbol at invalid position
         # TypeScript server will raise an exception for this
-        with pytest.raises(SolidLSPException) as exc_info:
-            language_server.request_defining_symbol(file_path, -1, -1)
-
-        # Verify it's the expected error
-        assert "Bad line number" in str(exc_info.value) or "Debug Failure" in str(
-            exc_info.value
-        ), f"Expected TypeScript 'Bad line number' error, got: {exc_info.value}"
+        try:
+            result = language_server.request_defining_symbol(file_path, -1, -1)
+            log.info("[TEST-DEBUG] test_defining_symbol_at_invalid_position: NO EXCEPTION RAISED!")
+            log.info(f"[TEST-DEBUG] test_defining_symbol_at_invalid_position: Result type={type(result)}")
+            log.info(f"[TEST-DEBUG] test_defining_symbol_at_invalid_position: Result={result}")
+            # If we get here on Windows, it means no exception was raised - fail the test with debug info
+            pytest.fail(f"Expected SolidLSPException but got result: {result}")
+        except SolidLSPException as e:
+            log.info(f"[TEST-DEBUG] test_defining_symbol_at_invalid_position: Got SolidLSPException: {e}")
+            # Verify it's the expected error
+            assert "Bad line number" in str(e) or "Debug Failure" in str(e), f"Expected TypeScript 'Bad line number' error, got: {e}"
+        except Exception as e:
+            log.info(f"[TEST-DEBUG] test_defining_symbol_at_invalid_position: Got OTHER exception: {type(e).__name__}: {e}")
+            raise
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_referencing_symbols_beyond_file_bounds(self, language_server: SolidLanguageServer) -> None:
@@ -416,13 +457,22 @@ class TestVueReferenceEdgeCases:
         from solidlsp.ls_exceptions import SolidLSPException
 
         file_path = os.path.join("src", "stores", "calculator.ts")
+        log.info(f"[TEST-DEBUG] test_referencing_symbols_beyond_file_bounds: file_path={file_path}")
+        log.info("[TEST-DEBUG] test_referencing_symbols_beyond_file_bounds: Calling request_referencing_symbols with line=99999, col=99999")
 
         # Request referencing symbols beyond file bounds
         # TypeScript server will raise an exception for this
-        with pytest.raises(SolidLSPException) as exc_info:
-            list(language_server.request_referencing_symbols(file_path, 99999, 99999, include_self=False))
-
-        # Verify it's the expected error
-        assert "Bad line number" in str(exc_info.value) or "Debug Failure" in str(
-            exc_info.value
-        ), f"Expected TypeScript 'Bad line number' error, got: {exc_info.value}"
+        try:
+            result = list(language_server.request_referencing_symbols(file_path, 99999, 99999, include_self=False))
+            log.info("[TEST-DEBUG] test_referencing_symbols_beyond_file_bounds: NO EXCEPTION RAISED!")
+            log.info(f"[TEST-DEBUG] test_referencing_symbols_beyond_file_bounds: Result type={type(result)}")
+            log.info(f"[TEST-DEBUG] test_referencing_symbols_beyond_file_bounds: Result={result}")
+            # If we get here on Windows, it means no exception was raised - fail the test with debug info
+            pytest.fail(f"Expected SolidLSPException but got result: {result}")
+        except SolidLSPException as e:
+            log.info(f"[TEST-DEBUG] test_referencing_symbols_beyond_file_bounds: Got SolidLSPException: {e}")
+            # Verify it's the expected error
+            assert "Bad line number" in str(e) or "Debug Failure" in str(e), f"Expected TypeScript 'Bad line number' error, got: {e}"
+        except Exception as e:
+            log.info(f"[TEST-DEBUG] test_referencing_symbols_beyond_file_bounds: Got OTHER exception: {type(e).__name__}: {e}")
+            raise
