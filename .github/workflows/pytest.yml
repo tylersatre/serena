@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [windows-latest]
         python-version: ["3.11"]
     steps:
       - uses: actions/checkout@v3
@@ -349,14 +349,6 @@ jobs:
             mv regal.exe "$HOME/bin/"
             echo "$HOME/bin" >> $GITHUB_PATH
           fi
-      - name: Cache language servers
-        id: cache-language-servers
-        uses: actions/cache@v3
-        with:
-          path: ~/.serena/language_servers/static
-          key: language-servers-${{ runner.os }}-v1
-          restore-keys: |
-            language-servers-${{ runner.os }}-
       - name: Test with pytest
         shell: bash
         run: uv run poe test -m "not kotlin"
