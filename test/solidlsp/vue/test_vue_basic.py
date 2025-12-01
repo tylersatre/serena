@@ -1,10 +1,16 @@
+import logging
 import os
+import platform
+import sys
 
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
+
+# Set up detailed logging for debugging Windows CI issues
+log = logging.getLogger(__name__)
 
 
 @pytest.mark.vue
@@ -19,8 +25,50 @@ class TestVueLanguageServer:
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_find_referencing_symbols(self, language_server: SolidLanguageServer) -> None:
+        # Log environment info for debugging
+        print(f"\n{'='*80}")
+        print("DEBUG: test_find_referencing_symbols - Environment Info")
+        print(f"{'='*80}")
+        print(f"Platform: {platform.system()} {platform.release()}")
+        print(f"Python version: {sys.version}")
+        print(f"Repository root: {language_server.repository_root_path}")
+        print(f"Current working directory: {os.getcwd()}")
+
+        # Check Vue language server state
+        from solidlsp.language_servers.vue_language_server import VueLanguageServer
+
+        if isinstance(language_server, VueLanguageServer):
+            print("\nVue Language Server State:")
+            print(f"  - server_started: {language_server.server_started}")
+            print(f"  - server_ready: {language_server.server_ready.is_set()}")
+            print(f"  - _ts_server_started: {language_server._ts_server_started}")
+            print(f"  - _vue_files_indexed: {language_server._vue_files_indexed}")
+            print(f"  - _indexed_vue_file_uris: {language_server._indexed_vue_file_uris}")
+            if language_server._ts_server:
+                print(f"  - TS server open_file_buffers: {list(language_server._ts_server.open_file_buffers.keys())}")
+            else:
+                print("  - TS server: None (NOT STARTED!)")
+
         store_file = os.path.join("src", "stores", "calculator.ts")
+        print(f"\nStore file path: {store_file}")
+        print(f"Store file absolute: {os.path.join(language_server.repository_root_path, store_file)}")
+        print(f"Store file exists: {os.path.exists(os.path.join(language_server.repository_root_path, store_file))}")
+
+        # List all .vue files in the repo for debugging
+        vue_files_found = []
+        for root, dirs, files in os.walk(language_server.repository_root_path):
+            # Skip node_modules
+            dirs[:] = [d for d in dirs if d != "node_modules"]
+            for f in files:
+                if f.endswith(".vue"):
+                    rel_path = os.path.relpath(os.path.join(root, f), language_server.repository_root_path)
+                    vue_files_found.append(rel_path)
+        print(f"\nVue files found in repository: {vue_files_found}")
+
         symbols = language_server.request_document_symbols(store_file).get_all_symbols_and_roots()
+        print(f"\nDocument symbols returned: {len(symbols[0])} symbols")
+        for sym in symbols[0]:
+            print(f"  - {sym.get('name')} (kind: {sym.get('kind')})")
 
         # Find useCalculatorStore function
         store_symbol = None
@@ -30,10 +78,38 @@ class TestVueLanguageServer:
                 break
 
         assert store_symbol is not None, "useCalculatorStore function not found"
+        print("\nFound useCalculatorStore symbol:")
+        print(f"  - selectionRange: {store_symbol.get('selectionRange')}")
+        print(f"  - range: {store_symbol.get('range')}")
 
         # Get references
         sel_start = store_symbol["selectionRange"]["start"]
+        print(f"\nRequesting references at line {sel_start['line']}, character {sel_start['character']}")
+
+        # Log state before requesting references
+        if isinstance(language_server, VueLanguageServer):
+            print("\nState before request_references:")
+            print(f"  - _vue_files_indexed: {language_server._vue_files_indexed}")
+            print(f"  - _has_waited_for_cross_file_references: {language_server._has_waited_for_cross_file_references}")
+            if language_server._ts_server:
+                print(f"  - TS server open buffers count: {len(language_server._ts_server.open_file_buffers)}")
+                print(f"  - TS server open buffers: {list(language_server._ts_server.open_file_buffers.keys())}")
+
         refs = language_server.request_references(store_file, sel_start["line"], sel_start["character"])
+
+        # Log state after requesting references
+        if isinstance(language_server, VueLanguageServer):
+            print("\nState after request_references:")
+            print(f"  - _vue_files_indexed: {language_server._vue_files_indexed}")
+            if language_server._ts_server:
+                print(f"  - TS server open buffers count: {len(language_server._ts_server.open_file_buffers)}")
+                print(f"  - TS server open buffers: {list(language_server._ts_server.open_file_buffers.keys())}")
+
+        print(f"\nReferences found: {len(refs)}")
+        for i, ref in enumerate(refs):
+            print(f"  {i+1}. {ref.get('relativePath', ref.get('uri', 'unknown'))}")
+            print(f"      URI: {ref.get('uri')}")
+            print(f"      Range: {ref.get('range')}")
 
         # Should have multiple references: definition + usage in App.vue, CalculatorInput.vue, CalculatorDisplay.vue
         assert len(refs) >= 4, f"useCalculatorStore should have at least 4 references (definition + 3 usages), got {len(refs)}"

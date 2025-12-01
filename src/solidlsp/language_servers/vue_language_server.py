@@ -196,27 +196,34 @@ class VueLanguageServer(SolidLanguageServer):
         return vue_files
 
     def _ensure_vue_files_indexed_on_ts_server(self) -> None:
+        log.info(f"[DEBUG] _ensure_vue_files_indexed_on_ts_server called, _vue_files_indexed={self._vue_files_indexed}")
         if self._vue_files_indexed:
+            log.info("[DEBUG] Vue files already indexed, skipping")
             return
 
-        assert self._ts_server is not None
+        assert self._ts_server is not None, "TypeScript server must be started before indexing Vue files"
         log.info("Indexing .vue files on TypeScript server for cross-file references")
         vue_files = self._find_all_vue_files()
-        log.debug(f"Found {len(vue_files)} .vue files to index")
+        log.info(f"[DEBUG] Found {len(vue_files)} .vue files to index: {vue_files}")
 
         for vue_file in vue_files:
             try:
+                log.info(f"[DEBUG] Opening Vue file on TS server: {vue_file}")
                 with self._ts_server.open_file(vue_file) as file_buffer:
                     file_buffer.ref_count += 1
                     self._indexed_vue_file_uris.append(file_buffer.uri)
+                    log.info(f"[DEBUG] Successfully opened Vue file: {vue_file}, URI: {file_buffer.uri}")
             except Exception as e:
-                log.debug(f"Failed to open {vue_file} on TS server: {e}")
+                log.warning(f"[DEBUG] Failed to open {vue_file} on TS server: {e}")
 
         self._vue_files_indexed = True
-        log.info("Vue file indexing on TypeScript server complete")
+        log.info(f"[DEBUG] Vue file indexing complete. Indexed URIs: {self._indexed_vue_file_uris}")
+        log.info(f"[DEBUG] TS server open_file_buffers after indexing: {list(self._ts_server.open_file_buffers.keys())}")
 
-        sleep(self._get_vue_indexing_wait_time())
-        log.debug("Wait period after Vue file indexing complete")
+        wait_time = self._get_vue_indexing_wait_time()
+        log.info(f"[DEBUG] Waiting {wait_time}s after Vue file indexing...")
+        sleep(wait_time)
+        log.info("[DEBUG] Wait period after Vue file indexing complete")
 
     def _get_vue_indexing_wait_time(self) -> float:
         return self.VUE_INDEXING_WAIT_TIME
@@ -232,28 +239,47 @@ class VueLanguageServer(SolidLanguageServer):
         return self.server.send.references(request_params)  # type: ignore[arg-type]
 
     def _send_ts_references_request(self, relative_file_path: str, line: int, column: int) -> list[ls_types.Location]:
-        assert self._ts_server is not None
-        uri = PathUtils.path_to_uri(os.path.join(self.repository_root_path, relative_file_path))
+        log.info(f"[DEBUG] _send_ts_references_request called for {relative_file_path} at line={line}, col={column}")
+        assert self._ts_server is not None, "TypeScript server must be started"
+
+        abs_file_path = os.path.join(self.repository_root_path, relative_file_path)
+        uri = PathUtils.path_to_uri(abs_file_path)
+        log.info(f"[DEBUG] File absolute path: {abs_file_path}")
+        log.info(f"[DEBUG] File URI: {uri}")
+        log.info(f"[DEBUG] File exists: {os.path.exists(abs_file_path)}")
+
         request_params = {
             "textDocument": {"uri": uri},
             "position": {"line": line, "character": column},
             "context": {"includeDeclaration": True},
         }
+        log.info(f"[DEBUG] Request params: {request_params}")
+        log.info(f"[DEBUG] TS server open_file_buffers before request: {list(self._ts_server.open_file_buffers.keys())}")
 
         with self._ts_server.open_file(relative_file_path):
+            log.info(f"[DEBUG] TS server open_file_buffers during request: {list(self._ts_server.open_file_buffers.keys())}")
+            log.info("[DEBUG] Sending references request to TypeScript server...")
             response = self._ts_server.handler.send.references(request_params)  # type: ignore[arg-type]
+            log.info(f"[DEBUG] Raw response from TS server: {response}")
+            log.info(f"[DEBUG] Response type: {type(response)}")
+            if response:
+                log.info(f"[DEBUG] Response length: {len(response)}")
+                for i, item in enumerate(response):
+                    log.info(f"[DEBUG] Response item {i}: {item}")
 
         result: list[ls_types.Location] = []
         if response is not None:
             for item in response:
                 abs_path = PathUtils.uri_to_path(item["uri"])
+                log.info(f"[DEBUG] Processing reference: URI={item['uri']}, abs_path={abs_path}")
+
                 if not Path(abs_path).is_relative_to(self.repository_root_path):
-                    log.debug(f"Found reference outside repository: {abs_path}, skipping")
+                    log.info(f"[DEBUG] Skipping reference outside repository: {abs_path}")
                     continue
 
                 rel_path = Path(abs_path).relative_to(self.repository_root_path)
                 if self.is_ignored_path(str(rel_path)):
-                    log.debug(f"Ignoring reference in {rel_path}")
+                    log.info(f"[DEBUG] Ignoring reference in ignored path: {rel_path}")
                     continue
 
                 new_item: dict = {}
@@ -261,7 +287,11 @@ class VueLanguageServer(SolidLanguageServer):
                 new_item["absolutePath"] = str(abs_path)
                 new_item["relativePath"] = str(rel_path)
                 result.append(ls_types.Location(**new_item))  # type: ignore
+                log.info(f"[DEBUG] Added reference: {rel_path}")
+        else:
+            log.warning("[DEBUG] Response from TS server was None!")
 
+        log.info(f"[DEBUG] _send_ts_references_request returning {len(result)} references")
         return result
 
     def request_file_references(self, relative_file_path: str) -> list:
@@ -330,21 +360,32 @@ class VueLanguageServer(SolidLanguageServer):
 
     @override
     def request_references(self, relative_file_path: str, line: int, column: int) -> list[ls_types.Location]:
+        log.info(f"[DEBUG] request_references called for {relative_file_path} at line={line}, col={column}")
+        log.info(f"[DEBUG] server_started={self.server_started}, _ts_server={self._ts_server is not None}")
+        log.info(f"[DEBUG] _ts_server_started={self._ts_server_started}, _vue_files_indexed={self._vue_files_indexed}")
+
         if not self.server_started:
             log.error("request_references called before Language Server started")
             raise SolidLSPException("Language Server not started")
 
         if not self._has_waited_for_cross_file_references:
-            sleep(self._get_wait_time_for_cross_file_referencing())
+            wait_time = self._get_wait_time_for_cross_file_referencing()
+            log.info(f"[DEBUG] First call - waiting {wait_time}s for cross-file references...")
+            sleep(wait_time)
             self._has_waited_for_cross_file_references = True
+            log.info("[DEBUG] Cross-file reference wait complete")
 
+        log.info("[DEBUG] Ensuring Vue files are indexed on TS server...")
         self._ensure_vue_files_indexed_on_ts_server()
+        log.info("[DEBUG] Vue file indexing ensured, now sending TS references request...")
+
         symbol_refs = self._send_ts_references_request(relative_file_path, line=line, column=column)
+        log.info(f"[DEBUG] Got {len(symbol_refs)} symbol refs from TS server")
 
         if relative_file_path.endswith(".vue"):
-            log.info(f"Attempting to find file-level references for Vue component {relative_file_path}")
+            log.info(f"[DEBUG] File is .vue, attempting to find file-level references for {relative_file_path}")
             file_refs = self.request_file_references(relative_file_path)
-            log.info(f"file_refs result: {len(file_refs)} references found")
+            log.info(f"[DEBUG] file_refs result: {len(file_refs)} references found")
 
             seen = set()
             for ref in symbol_refs:
@@ -357,8 +398,9 @@ class VueLanguageServer(SolidLanguageServer):
                     symbol_refs.append(file_ref)
                     seen.add(key)
 
-            log.info(f"Total references for {relative_file_path}: {len(symbol_refs)} (symbol refs + file refs, deduplicated)")
+            log.info(f"[DEBUG] Total references for {relative_file_path}: {len(symbol_refs)} (symbol refs + file refs, deduplicated)")
 
+        log.info(f"[DEBUG] request_references returning {len(symbol_refs)} total references")
         return symbol_refs
 
     @override
@@ -527,12 +569,29 @@ class VueLanguageServer(SolidLanguageServer):
         try:
             vue_ts_plugin_path = os.path.join(self._vue_ls_dir, "node_modules", "@vue", "typescript-plugin")
 
+            log.info("[DEBUG] _start_typescript_server called")
+            log.info(f"[DEBUG] Vue LS dir: {self._vue_ls_dir}")
+            log.info(f"[DEBUG] Vue TS plugin path: {vue_ts_plugin_path}")
+            log.info(f"[DEBUG] Vue TS plugin exists: {os.path.exists(vue_ts_plugin_path)}")
+            log.info(f"[DEBUG] TSDK path: {self.tsdk_path}")
+            log.info(f"[DEBUG] TSDK path exists: {os.path.exists(self.tsdk_path)}")
+            log.info(f"[DEBUG] TS LS command: {self._ts_ls_cmd}")
+            log.info(f"[DEBUG] Repository root: {self.repository_root_path}")
+
+            # List contents of plugin directory for debugging
+            if os.path.exists(vue_ts_plugin_path):
+                try:
+                    plugin_contents = os.listdir(vue_ts_plugin_path)
+                    log.info(f"[DEBUG] Vue TS plugin directory contents: {plugin_contents}")
+                except Exception as e:
+                    log.warning(f"[DEBUG] Could not list plugin directory: {e}")
+
             ts_config = LanguageServerConfig(
                 code_language=Language.TYPESCRIPT,
                 trace_lsp_communication=False,
             )
 
-            log.info("Creating companion VueTypeScriptServer")
+            log.info("[DEBUG] Creating companion VueTypeScriptServer")
             self._ts_server = VueTypeScriptServer(
                 config=ts_config,
                 repository_root_path=self.repository_root_path,
@@ -542,20 +601,22 @@ class VueLanguageServer(SolidLanguageServer):
                 ts_ls_executable_path=self._ts_ls_cmd,
             )
 
-            log.info("Starting companion TypeScript server")
+            log.info("[DEBUG] Starting companion TypeScript server")
             self._ts_server.start()
 
-            log.info("Waiting for companion TypeScript server to be ready...")
+            log.info(f"[DEBUG] Waiting for companion TypeScript server to be ready (timeout={self.TS_SERVER_READY_TIMEOUT}s)...")
             if not self._ts_server.server_ready.wait(timeout=self.TS_SERVER_READY_TIMEOUT):
                 log.warning(
-                    f"Timeout waiting for companion TypeScript server to be ready after {self.TS_SERVER_READY_TIMEOUT} seconds, proceeding anyway"
+                    f"[DEBUG] Timeout waiting for companion TypeScript server to be ready after {self.TS_SERVER_READY_TIMEOUT} seconds, proceeding anyway"
                 )
                 self._ts_server.server_ready.set()
 
             self._ts_server_started = True
-            log.info("Companion TypeScript server ready")
+            log.info("[DEBUG] Companion TypeScript server ready")
+            log.info(f"[DEBUG] TS server handler: {self._ts_server.handler}")
+            log.info(f"[DEBUG] TS server open_file_buffers: {list(self._ts_server.open_file_buffers.keys())}")
         except Exception as e:
-            log.error(f"Error starting TypeScript server: {e}")
+            log.exception(f"[DEBUG] Error starting TypeScript server: {e}")
             self._ts_server = None
             self._ts_server_started = False
             raise

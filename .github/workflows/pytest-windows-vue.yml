@@ -38,6 +38,42 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: uv pip install -e ".[dev]"
-      - name: Run TypeScript and Vue tests
+      - name: Run TypeScript and Vue tests with verbose logging
         shell: bash
-        run: uv run poe test -m "typescript or vue"
+        env:
+          # Enable verbose logging for debugging
+          PYTHONUNBUFFERED: "1"
+        run: |
+          # Run tests with verbose output and capture all logs
+          uv run pytest test -vv -s -m "typescript or vue" \
+            --log-cli-level=DEBUG \
+            --log-cli-format="%(asctime)s %(levelname)s %(name)s: %(message)s" \
+            --tb=long \
+            2>&1 | tee test-output.log
+
+          # If test failed, show additional diagnostics
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo ""
+            echo "=========================================="
+            echo "TEST FAILED - Additional Diagnostics"
+            echo "=========================================="
+            echo ""
+            echo "Node.js version:"
+            node --version
+            echo ""
+            echo "npm version:"
+            npm --version
+            echo ""
+            echo "Python version:"
+            python --version
+            echo ""
+            echo "Contents of language servers directory:"
+            ls -la ~/.serena/language_servers/ 2>/dev/null || echo "Directory does not exist"
+            echo ""
+            echo "Contents of Vue LSP directory:"
+            ls -la ~/.serena/language_servers/vue-lsp/ 2>/dev/null || echo "Directory does not exist"
+            echo ""
+            echo "Contents of Vue LSP node_modules/.bin:"
+            ls -la ~/.serena/language_servers/vue-lsp/node_modules/.bin/ 2>/dev/null || echo "Directory does not exist"
+            exit 1
+          fi
