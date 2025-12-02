@@ -270,13 +270,14 @@ class VueLanguageServer(CompanionLanguageServer):
     @override
     def _on_companions_ready(self) -> None:
         """Wait for TypeScript companion server to be fully ready."""
-        if self._ts_server is not None:
+        ts_server = self._ts_server
+        if ts_server is not None:
             log.info("Waiting for companion TypeScript server to be ready...")
-            if not self._ts_server.server_ready.wait(timeout=self.TS_SERVER_READY_TIMEOUT):
+            if not ts_server.server_ready.wait(timeout=self.TS_SERVER_READY_TIMEOUT):
                 log.warning(
                     f"Timeout waiting for companion TypeScript server to be ready after {self.TS_SERVER_READY_TIMEOUT} seconds, proceeding anyway"
                 )
-                self._ts_server.server_ready.set()
+                ts_server.server_ready.set()
             log.info("Companion TypeScript server ready")
 
     @override
@@ -315,7 +316,7 @@ class VueLanguageServer(CompanionLanguageServer):
     # Vue-specific methods
     # ==========================================================================
 
-    def request_file_references(self, relative_file_path: str) -> list:
+    def request_file_references(self, relative_file_path: str) -> list[ls_types.Location]:
         if not self.server_started:
             log.error("request_file_references called before Language Server started")
             raise SolidLSPException("Language Server not started")
@@ -375,9 +376,12 @@ class VueLanguageServer(CompanionLanguageServer):
             log.debug(f"Found {len(ret)} file references for {relative_file_path}")
             return ret
 
-        except Exception as e:
-            log.warning(f"Error requesting file references for {relative_file_path}: {e}")
+        except SolidLSPException as e:
+            log.warning(f"LSP error requesting file references for {relative_file_path}: {e}")
             return []
+        except Exception as e:
+            log.error(f"Unexpected error requesting file references for {relative_file_path}: {e}")
+            raise
 
     @classmethod
     def _setup_runtime_dependencies(

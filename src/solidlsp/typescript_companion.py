@@ -1,9 +1,4 @@
-"""Helpers for TypeScript companion server configuration.
-
-This module provides utility functions for configuring TypeScript as a companion
-language server. TypeScript is the most common companion server for modern web
-frameworks like Vue, Svelte, and Astro.
-"""
+"""Helpers for configuring TypeScript as a companion language server."""
 
 from __future__ import annotations
 
@@ -21,31 +16,19 @@ def create_typescript_companion_config(
     priority: int = 100,
 ) -> EmbeddedLanguageConfig:
     """
-    Create a standard TypeScript embedded language configuration.
-
-    This is a convenience function for creating EmbeddedLanguageConfig instances
-    for TypeScript companion servers. TypeScript is typically configured to handle
-    definitions, references, and rename operations by default.
+    Create standard TypeScript embedded language configuration.
 
     Args:
-        file_patterns: Glob patterns for files to index (e.g., ["*.vue", "*.svelte"]).
-            These patterns determine which domain files should be opened on the
-            TypeScript server for cross-file reference support.
-        handles_definitions: Whether the TypeScript server handles go-to-definition
-            requests. Defaults to True.
-        handles_references: Whether the TypeScript server handles find-references
-            requests. Defaults to True.
-        handles_rename: Whether the TypeScript server handles rename requests.
-            Defaults to True.
-        handles_completions: Whether the TypeScript server handles completion
-            requests. Defaults to False (often handled by domain server).
-        handles_diagnostics: Whether the TypeScript server handles diagnostic
-            requests. Defaults to False (often handled by domain server).
-        priority: Priority for this companion when multiple could handle an
-            operation. Defaults to 100 (high priority).
+        file_patterns: Glob patterns for files to index (e.g., ["*.vue"]).
+        handles_definitions: Handle go-to-definition requests.
+        handles_references: Handle find-references requests.
+        handles_rename: Handle rename requests.
+        handles_completions: Handle completion requests.
+        handles_diagnostics: Handle diagnostic requests.
+        priority: Priority when multiple companions could handle an operation.
 
     Returns:
-        A configured EmbeddedLanguageConfig instance for TypeScript.
+        Configured EmbeddedLanguageConfig for TypeScript.
 
     """
     return EmbeddedLanguageConfig(
@@ -64,21 +47,13 @@ def prefer_non_node_modules_definition(
     definitions: list[ls_types.Location],
 ) -> ls_types.Location:
     """
-    Select the preferred definition, preferring source files over type definitions.
-
-    TypeScript language servers often return both type definitions (.d.ts files
-    in node_modules) and source definitions. This function prefers:
-    1. Files not in node_modules
-    2. Falls back to first definition if all are in node_modules
-
-    This function should be used in _get_preferred_definition() overrides for
-    language servers that use TypeScript companions.
+    Select preferred definition, favoring source files over node_modules.
 
     Args:
-        definitions: A non-empty list of definition locations.
+        definitions: Non-empty list of definition locations.
 
     Returns:
-        The preferred definition location.
+        Preferred definition location (first non-node_modules, or first if all in node_modules).
 
     """
     for d in definitions:
