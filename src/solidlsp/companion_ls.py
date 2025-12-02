@@ -30,13 +30,17 @@ class CompanionLanguageServer(SolidLanguageServer):
     """
 
     def __init__(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
+        """
+        Initialize the CompanionLanguageServer.
+
+        :param args: Positional arguments passed to SolidLanguageServer
+        :param kwargs: Keyword arguments passed to SolidLanguageServer
+        """
         super().__init__(*args, **kwargs)
         self._companions: dict[str, SolidLanguageServer] = {}
         self._companion_configs: dict[str, EmbeddedLanguageConfig] = {}
         self._domain_files_indexed: bool = False
         self._indexed_file_uris: list[str] = []
-
-    # Abstract methods
 
     @abstractmethod
     def _get_domain_file_extension(self) -> str:
@@ -48,12 +52,20 @@ class CompanionLanguageServer(SolidLanguageServer):
 
     @abstractmethod
     def _create_companion_server(self, config: EmbeddedLanguageConfig) -> SolidLanguageServer:
-        """Create companion server for given configuration. Server must not be started."""
+        """
+        Create companion server for given configuration. Server must not be started.
 
-    # Extension points
+        :param config: Configuration for the embedded language
+        :return: Configured but not yet started SolidLanguageServer instance
+        """
 
     def _get_domain_specific_references(self, relative_file_path: str) -> list[ls_types.Location]:
-        """Override to add domain-specific reference finding."""
+        """
+        Override to add domain-specific reference finding.
+
+        :param relative_file_path: Path to file relative to repository root
+        :return: List of domain-specific references
+        """
         return []
 
     def _setup_domain_protocol_handlers(self) -> None:
@@ -67,7 +79,13 @@ class CompanionLanguageServer(SolidLanguageServer):
         companion_refs: list[ls_types.Location],
         domain_refs: list[ls_types.Location],
     ) -> list[ls_types.Location]:
-        """Merge and deduplicate references from companion and domain sources."""
+        """
+        Merge and deduplicate references from companion and domain sources.
+
+        :param companion_refs: References from companion language servers
+        :param domain_refs: References from domain-specific sources
+        :return: Deduplicated list of all references
+        """
         seen: set[tuple[str, int, int]] = set()
         result: list[ls_types.Location] = []
 
@@ -83,10 +101,13 @@ class CompanionLanguageServer(SolidLanguageServer):
 
         return result
 
-    # Implementation
-
     def _find_companion_for_operation(self, operation: str) -> SolidLanguageServer | None:
-        """Find highest-priority companion server for the given operation."""
+        """
+        Find highest-priority companion server for the given operation.
+
+        :param operation: Operation name (e.g., "definitions", "references", "rename")
+        :return: Companion server with highest priority for operation, or None if none found
+        """
         candidates: list[tuple[int, str]] = []
 
         for lang_id, config in self._companion_configs.items():
@@ -101,7 +122,11 @@ class CompanionLanguageServer(SolidLanguageServer):
         return self._companions.get(candidates[0][1])
 
     def _find_all_domain_files(self) -> list[str]:
-        """Find all domain files in repository, excluding ignored directories."""
+        """
+        Find all domain files in repository, excluding ignored directories.
+
+        :return: List of relative paths to domain files
+        """
         ext = self._get_domain_file_extension()
         domain_files: list[str] = []
         repo_path = self.repository_root_path
@@ -123,7 +148,12 @@ class CompanionLanguageServer(SolidLanguageServer):
         return domain_files
 
     def _ensure_domain_files_indexed(self) -> None:
-        """Index domain files on companion servers for cross-file references."""
+        """
+        Index domain files on companion servers for cross-file references.
+
+        Opens all domain files matching companion patterns on respective servers
+        to enable cross-file symbol resolution.
+        """
         if self._domain_files_indexed:
             return
 
@@ -172,7 +202,12 @@ class CompanionLanguageServer(SolidLanguageServer):
         log.info("Domain file indexing complete")
 
     def _cleanup_indexed_files(self) -> None:
-        """Clean up indexed files on companion servers."""
+        """
+        Clean up indexed files on companion servers.
+
+        Closes files that were opened for cross-file indexing and removes them
+        from companion server buffers.
+        """
         if not self._indexed_file_uris:
             return
 
@@ -205,7 +240,15 @@ class CompanionLanguageServer(SolidLanguageServer):
         line: int,
         column: int,
     ) -> list[ls_types.Location]:
-        """Send references request to companion, filtering to repository files."""
+        """
+        Send references request to companion, filtering to repository files.
+
+        :param companion: Companion language server to query
+        :param relative_file_path: Path to file relative to repository root
+        :param line: Line number of symbol
+        :param column: Column number of symbol
+        :return: List of references within repository
+        """
         uri = PathUtils.path_to_uri(os.path.join(self.repository_root_path, relative_file_path))
         request_params = {
             "textDocument": {"uri": uri},
@@ -238,8 +281,6 @@ class CompanionLanguageServer(SolidLanguageServer):
 
         return result
 
-    # LSP overrides
-
     @override
     def request_definition(
         self,
@@ -248,7 +289,7 @@ class CompanionLanguageServer(SolidLanguageServer):
         column: int,
     ) -> list[ls_types.Location]:
         if not self.server_started:
-            log.error("request_definition called before Language Server started")
+            log.error("request_definition called before language server started")
             raise SolidLSPException("Language Server not started")
 
         companion = self._find_companion_for_operation("definitions")
@@ -272,7 +313,7 @@ class CompanionLanguageServer(SolidLanguageServer):
         column: int,
     ) -> list[ls_types.Location]:
         if not self.server_started:
-            log.error("request_references called before Language Server started")
+            log.error("request_references called before language server started")
             raise SolidLSPException("Language Server not started")
 
         if not self._has_waited_for_cross_file_references:
@@ -299,7 +340,7 @@ class CompanionLanguageServer(SolidLanguageServer):
         new_name: str,
     ) -> ls_types.WorkspaceEdit | None:
         if not self.server_started:
-            log.error("request_rename_symbol_edit called before Language Server started")
+            log.error("request_rename_symbol_edit called before language server started")
             raise SolidLSPException("Language Server not started")
 
         companion = self._find_companion_for_operation("rename")
@@ -309,18 +350,15 @@ class CompanionLanguageServer(SolidLanguageServer):
 
         return super().request_rename_symbol_edit(relative_file_path, line, column, new_name)
 
-    # Lifecycle
-
     def _start_companions(self) -> None:
+        """
+        Start all companion language servers.
+
+        Creates and starts each companion server defined by embedded language configs.
+        """
         for config in self._get_embedded_language_configs():
             log.info(f"Creating companion server for {config.language_id}")
             companion = self._create_companion_server(config)
-
-            if companion.server_started:
-                raise SolidLSPException(
-                    f"Companion server for {config.language_id} was already started by _create_companion_server(). "
-                    "Server should be configured but NOT started."
-                )
 
             log.info(f"Starting companion server for {config.language_id}")
             companion.start()
@@ -333,7 +371,7 @@ class CompanionLanguageServer(SolidLanguageServer):
         self._setup_domain_protocol_handlers()
 
     @override
-    def stop(self, shutdown_timeout: float = 5.0) -> None:
+    def stop(self, shutdown_timeout: float = 2.0) -> None:
         self._cleanup_indexed_files()
 
         failed_companions: list[str] = []

@@ -1,14 +1,16 @@
-"""Configuration for embedded languages handled by companion servers."""
+"""
+Configuration for embedded languages handled by companion servers.
+"""
 
 from __future__ import annotations
 
-import dataclasses
+from dataclasses import dataclass
 
 
-@dataclasses.dataclass
+@dataclass
 class EmbeddedLanguageConfig:
     """
-    Configuration for embedded language requiring a companion server.
+    Configuration for an embedded language handled by a companion language server.
 
     Specifies which LSP operations the companion handles and which files to index.
     """

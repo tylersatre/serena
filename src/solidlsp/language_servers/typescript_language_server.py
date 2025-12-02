@@ -50,11 +50,24 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         - typescript_language_server_version: Version of typescript-language-server to install (default: "5.1.3")
     """
 
-    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
+    def __init__(
+        self,
+        config: LanguageServerConfig,
+        repository_root_path: str,
+        solidlsp_settings: SolidLSPSettings,
+        executable_path: list[str] | None = None,
+    ):
         """
         Creates a TypeScriptLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
+
+        :param config: Language server configuration
+        :param repository_root_path: Root path of the repository
+        :param solidlsp_settings: SolidLSP settings
+        :param executable_path: Optional custom executable path. If None, uses default from _setup_runtime_dependencies
         """
-        ts_lsp_executable_path = self._setup_runtime_dependencies(config, solidlsp_settings)
+        ts_lsp_executable_path = (
+            executable_path if executable_path is not None else self._setup_runtime_dependencies(config, solidlsp_settings)
+        )
         super().__init__(
             config,
             repository_root_path,

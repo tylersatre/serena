@@ -18,18 +18,14 @@ def create_typescript_companion_config(
     """
     Create standard TypeScript embedded language configuration.
 
-    Args:
-        file_patterns: Glob patterns for files to index (e.g., ["*.vue"]).
-        handles_definitions: Handle go-to-definition requests.
-        handles_references: Handle find-references requests.
-        handles_rename: Handle rename requests.
-        handles_completions: Handle completion requests.
-        handles_diagnostics: Handle diagnostic requests.
-        priority: Priority when multiple companions could handle an operation.
-
-    Returns:
-        Configured EmbeddedLanguageConfig for TypeScript.
-
+    :param file_patterns: Glob patterns for files to index (e.g., ["*.vue"])
+    :param handles_definitions: Handle go-to-definition requests
+    :param handles_references: Handle find-references requests
+    :param handles_rename: Handle rename requests
+    :param handles_completions: Handle completion requests
+    :param handles_diagnostics: Handle diagnostic requests
+    :param priority: Priority when multiple companions could handle an operation
+    :return: Configured EmbeddedLanguageConfig for TypeScript
     """
     return EmbeddedLanguageConfig(
         language_id="typescript",
@@ -49,13 +45,11 @@ def prefer_non_node_modules_definition(
     """
     Select preferred definition, favoring source files over node_modules.
 
-    Args:
-        definitions: Non-empty list of definition locations.
-
-    Returns:
-        Preferred definition location (first non-node_modules, or first if all in node_modules).
-
+    :param definitions: Non-empty list of definition locations
+    :return: Preferred definition location (first non-node_modules, or first if all in node_modules)
     """
+    if not definitions:
+        raise ValueError("definitions list cannot be empty")
     for d in definitions:
         rel_path = d.get("relativePath", "")
         if rel_path and "node_modules" not in rel_path:
