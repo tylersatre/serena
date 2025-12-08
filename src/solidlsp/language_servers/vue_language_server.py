@@ -40,12 +40,6 @@ class VueTypeScriptServer(TypeScriptLanguageServer):
     @classmethod
     @override
     def get_language_enum_instance(cls) -> Language:
-        """Return TYPESCRIPT since this is a TypeScript language server variant.
-
-        Note: VueTypeScriptServer is a companion server that uses TypeScript's language server
-        with the Vue TypeScript plugin. It reports as TYPESCRIPT to maintain compatibility
-        with the TypeScript language server infrastructure.
-        """
         return Language.TYPESCRIPT
 
     @override
@@ -141,6 +135,7 @@ class VueLanguageServer(CompanionLanguageServer):
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         vue_lsp_executable_path, self.tsdk_path, self._ts_ls_cmd = self._setup_runtime_dependencies(config, solidlsp_settings)
         self._vue_ls_dir = os.path.join(self.ls_resources_dir(solidlsp_settings), "vue-lsp")
+        self.server_ready = threading.Event()
         super().__init__(
             config,
             repository_root_path,
@@ -148,7 +143,6 @@ class VueLanguageServer(CompanionLanguageServer):
             "vue",
             solidlsp_settings,
         )
-        self.server_ready = threading.Event()
 
     @override
     def _get_domain_file_extension(self) -> str:

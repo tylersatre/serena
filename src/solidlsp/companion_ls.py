@@ -30,12 +30,6 @@ class CompanionLanguageServer(SolidLanguageServer):
     """
 
     def __init__(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
-        """
-        Initialize the CompanionLanguageServer.
-
-        :param args: Positional arguments passed to SolidLanguageServer
-        :param kwargs: Keyword arguments passed to SolidLanguageServer
-        """
         super().__init__(*args, **kwargs)
         self._companions: dict[str, SolidLanguageServer] = {}
         self._companion_configs: dict[str, EmbeddedLanguageConfig] = {}
@@ -44,11 +38,11 @@ class CompanionLanguageServer(SolidLanguageServer):
 
     @abstractmethod
     def _get_domain_file_extension(self) -> str:
-        """Return primary file extension (e.g., ".vue", ".svelte")."""
+        pass
 
     @abstractmethod
     def _get_embedded_language_configs(self) -> list[EmbeddedLanguageConfig]:
-        """Return list of embedded language configurations for companion servers."""
+        pass
 
     @abstractmethod
     def _create_companion_server(self, config: EmbeddedLanguageConfig) -> SolidLanguageServer:
@@ -158,7 +152,7 @@ class CompanionLanguageServer(SolidLanguageServer):
             return
 
         domain_files = self._find_all_domain_files()
-        log.info(f"Indexing {len(domain_files)} domain files on companion servers")
+        log.debug(f"Indexing {len(domain_files)} domain files on companion servers")
 
         for lang_id, config in self._companion_configs.items():
             companion = self._companions.get(lang_id)
@@ -193,13 +187,12 @@ class CompanionLanguageServer(SolidLanguageServer):
                                 }
                             }
                         )
-
-                    self._indexed_file_uris.append(uri)
+                        self._indexed_file_uris.append(uri)
                 except Exception as e:
                     log.debug(f"Failed to index {domain_file} on {lang_id} server: {e}")
 
         self._domain_files_indexed = True
-        log.info("Domain file indexing complete")
+        log.debug("Domain file indexing complete")
 
     def _cleanup_indexed_files(self) -> None:
         """
@@ -214,7 +207,7 @@ class CompanionLanguageServer(SolidLanguageServer):
         log.debug(f"Cleaning up {len(self._indexed_file_uris)} indexed files")
 
         failed_cleanups: list[tuple[str, str]] = []
-        for uri in self._indexed_file_uris:
+        for uri in set(self._indexed_file_uris):
             for companion in self._companions.values():
                 try:
                     if uri in companion.open_file_buffers:
